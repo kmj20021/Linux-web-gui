@@ -1,0 +1,14 @@
+minje@mjpi:~$ sudo fail2ban-client status sshd
+Status for the jail: sshd
+|- Filter
+|  |- Currently failed: 0
+|  |- Total failed:     0
+|  `- Journal matches:  _SYSTEMD_UNIT=sshd.service + _COMM=sshd
+`- Actions
+   |- Currently banned: 0
+   |- Total banned:     0
+   `- Banned IP list:
+
+   #차단된 ip 해제
+   sudo fail2ban-client set sshd unbanip ip주소
+   

@@ -1,0 +1,43 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    platform: linux/arm64
+    # 노트북 개발 시에는 필요하지만, 운영 환경(라즈베리)에서는 Nginx가 파일을 읽기만 하므로 
+    # frontend 컨테이너가 계속 떠 있을 필요가 없는 경우가 많습니다.
+    volumes:
+      - frontend_build:/app/dist
+
+  backend:
+    build:
+      context: ./backend
+    platform: linux/arm64
+    ports:
+      - "8000:8000"
+    environment:
+      # 값 없이 변수명만 적으면 쉘의 환경변수나 .env 파일을 참조합니다.
+      - DATABASE_URL
+      - SECRET_KEY
+      - ALGORITHM
+    privileged: false 
+    # [보안 수정] /etc/passwd 마운트는 특수한 경우(시스템 계정 연동)가 아니면 삭제하세요.
+    # 단순 로그 분석용이라면 로그 파일이 적재되는 경로만 마운트하는 것이 안전합니다.
+    volumes:
+      - /var/log:/var/log:ro  # 예: 시스템 로그를 분석한다면 로그 경로만 읽기 전용으로
+
+  nginx:
+    image: nginx:1.24-alpine
+    # Nginx도 명시적으로 플랫폼을 지정해주면 더 정확합니다.
+    platform: linux/arm64
+    ports:
+      - "80:80"
+    volumes:
+      - frontend_build:/usr/share/nginx/html:ro # 읽기 전용(ro) 추가
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro 
+    depends_on:
+      - frontend
+      - backend
+    restart: always # 라즈베리 파이 재부팅 시 자동 실행
+
+volumes:
+  frontend_build:
