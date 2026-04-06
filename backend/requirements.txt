@@ -8,3 +8,4 @@ sqlalchemy==2.0.23 #파이썬 코드로 데이터베이스 조작
 psutil==6.1.0 #시스템 리소스 모니터링
 python-multipart==0.0.6 #파일 업로드, 복잡한 폼 보낼 때 해석
 aiosqlite==0.19.0 #비동기 SQLite 드라이버
+loguru==0.6.0 #로깅 라이브러리
