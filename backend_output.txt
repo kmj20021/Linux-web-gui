@@ -1,0 +1,3 @@
+Attaching to backend-1
+backend-1  | INFO:     172.18.0.1:42782 - "GET /openapi.json HTTP/1.1" 200 OK
+[Kbackend-1 exited with code 0
