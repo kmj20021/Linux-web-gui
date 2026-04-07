@@ -1,11 +1,11 @@
-fastapi==0.115.0 #웹 프레임워크
-uvicorn==0.30.0 #엔진
-pydantic==2.4.2 #데이터 검증 및 설정 관리
-python-jose==3.3.0 #JWT 토큰 처리
-passlib==1.7.4 #비밀번호 해싱
-bcrypt==4.1.1 #비밀번호 해싱
-sqlalchemy==2.0.23 #파이썬 코드로 데이터베이스 조작
-psutil==6.1.0 #시스템 리소스 모니터링
-python-multipart==0.0.6 #파일 업로드, 복잡한 폼 보낼 때 해석
-aiosqlite==0.19.0 #비동기 SQLite 드라이버
-loguru==0.6.0 #로깅 라이브러리
+fastapi==0.115.0 
+uvicorn==0.30.0 
+pydantic==2.4.2 
+python-jose==3.3.0 
+passlib==1.7.4 
+bcrypt==4.1.1 
+sqlalchemy==2.0.23 
+psutil==6.1.0 
+python-multipart==0.0.6 
+aiosqlite==0.19.0 
+loguru==0.6.0 

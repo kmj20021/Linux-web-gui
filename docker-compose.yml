@@ -6,7 +6,7 @@ services:
     # 노트북 개발 시에는 필요하지만, 운영 환경(라즈베리)에서는 Nginx가 파일을 읽기만 하므로 
     # frontend 컨테이너가 계속 떠 있을 필요가 없는 경우가 많습니다.
     volumes:
-      - frontend_build:/app/dist
+      - frontend_build:/app/dist #라즈베리 파이의 frontend_build와 컨테이너의 /app/dist를 연결
 
   backend:
     build:
