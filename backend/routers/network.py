@@ -33,7 +33,7 @@ async def get_network_interfaces():
                     "status": "up" if stats.isup else "down",
                     "ipv4": ipv4,
                     "mac": mac or "N/A",
-                    "mtu": stats.mtu
+                    "mtu": stats.mtu # MTU는 인터페이스의 최대 전송 단위로, 네트워크 패킷의 최대 크기를 나타냄
                 })
         return interfaces
     except Exception:

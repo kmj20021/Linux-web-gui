@@ -3,60 +3,19 @@
 CPU·메모리·디스크·네트워크 실시간 조회
 """
 from fastapi import APIRouter
-from pydantic import BaseModel
 import psutil
 from typing import List, Optional
 from datetime import datetime, timezone
 
+from schemas.monitor import (
+    CPUMetrics,
+    MemoryMetrics,
+    DiskMetrics,
+    NetworkMetrics,
+    ProcessInfo,
+)
+
 router = APIRouter(prefix="/monitor", tags=["모니터링"])
-
-# ============================================================
-# 데이터 모델 (Pydantic BaseModel)
-# ============================================================
-
-class CPUMetrics(BaseModel):
-    """CPU 메트릭"""
-    cpu_total: float
-    cpu_per_core: List[float]
-    core_count: int
-    load_avg: List[float]
-    recorded_at: str
-
-class MemoryMetrics(BaseModel):
-    """메모리 메트릭"""
-    total_gb: float
-    used_gb: float
-    free_gb: float
-    buffers_gb: float
-    cached_gb: float
-    usage_pct: float
-
-class DiskMetrics(BaseModel):
-    """디스크 메트릭"""
-    path: str # 마운트 경로
-    total_gb: float
-    used_gb: float
-    free_gb: float
-    usage_pct: float
-
-class NetworkMetrics(BaseModel):
-    """네트워크 메트릭"""
-    interface: str      # 인터페이스명 (예: eth0, lo)
-    bytes_sent: int     # 송신 바이트(보낸 무게)
-    bytes_recv: int     # 수신 바이트(받은 무게)
-    packets_sent: int   # 송신 패킷 수(보낸 데이터그램 수)
-    packets_recv: int   # 수신 패킷 수(받은 데이터그램 수)
-    errin: int          # 입력 오류 수
-    errout: int         # 출력 오류 수
-    dropin: int         # 입력 드롭 수(받은게 너무 많아 거절)
-    dropout: int        # 출력 드롭 수(보낸게 너무 많아 거절)
-
-class ProcessInfo(BaseModel):
-    """느리게 만드는 상위 프로세스 정보"""
-    pid: int
-    name: str
-    cpu_pct: float
-    mem_pct: float
 
 # ============================================================
 # CPU 엔드포인트 (1번 목표)
