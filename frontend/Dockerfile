@@ -2,9 +2,9 @@
 FROM node:20-alpine as builder
 WORKDIR /app
 
-# npm 의존성 설치
-COPY package.json package-lock.json ./
-RUN npm ci && npm cache clean --force
+# npm 의존성 설치 (package-lock.json이 있으면 사용, 없으면 무시)
+COPY package.json package-lock.json* ./
+RUN npm install && npm cache clean --force
 
 # 소스 코드 복사 및 빌드
 COPY . .
