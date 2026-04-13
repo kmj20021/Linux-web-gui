@@ -120,7 +120,7 @@ async def websocket_monitor(websocket: WebSocket):
     WebSocket 실시간 모니터링 엔드포인트
     
     사용 예:
-    - ws://localhost:8000/ws/monitor?token=test-token
+    - ws://localhost:8000/ws/monitor?token=test_token_123
     
     메시지 형식:
     {
@@ -132,14 +132,20 @@ async def websocket_monitor(websocket: WebSocket):
     }
     """
     # URL 쿼리 파라미터에서 토큰 추출
-    query_string = websocket.scope.get("query_string", b"").decode()
-    query_params = parse_qs(query_string)
-    token = query_params.get("token", [None])[0]
+    try:
+        query_string = websocket.scope.get("query_string", b"").decode()
+        query_params = parse_qs(query_string) if query_string else {}
+        token = query_params.get("token", [None])[0]
+        logger.info(f"🔍 WebSocket 연결 요청: token={token}, query_string={query_string}")
+    except Exception as e:
+        logger.error(f"❌ 쿼리 파라미터 파싱 실패: {e}")
+        await websocket.close(code=4001, reason="Invalid query parameters")
+        return
     
     # 토큰 검증
     if not verify_token(token):
+        logger.warning(f"⚠️ WebSocket 인증 실패: token={token}, valid_tokens={VALID_TOKENS}")
         await websocket.close(code=4001, reason="Unauthorized: Invalid or missing token")
-        logger.warning(f"WebSocket 인증 실패: token={token}")
         return
     
     await websocket.accept()
