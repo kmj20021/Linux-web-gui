@@ -48,10 +48,10 @@ app.add_middleware(
 
 # 라우터 등록
 if logger_import_success:
-    app.include_router(auth_router)
-    app.include_router(monitor_router)
-    app.include_router(websocket_router)
-    app.include_router(history_router)
+    app.include_router(auth_router, prefix="/api")
+    app.include_router(monitor_router, prefix="/api")
+    app.include_router(websocket_router)  # /ws/는 nginx에서 별도 설정
+    app.include_router(history_router, prefix="/api")
     logger.info("✅ auth, monitor, websocket, history 라우터 등록됨")
 else:
     logger.warning("⚠️ 라우터 등록 실패")
