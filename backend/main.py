@@ -16,6 +16,7 @@ try:
     from routers.monitor import router as monitor_router
     from routers.websocket import router as websocket_router
     from routers.history import router as history_router
+    from routers.auth import router as auth_router
     logger_import_success = True
 except ImportError as e:
     logger_import_success = False
@@ -47,10 +48,11 @@ app.add_middleware(
 
 # 라우터 등록
 if logger_import_success:
+    app.include_router(auth_router)
     app.include_router(monitor_router)
     app.include_router(websocket_router)
     app.include_router(history_router)
-    logger.info("✅ monitor, websocket, history 라우터 등록됨")
+    logger.info("✅ auth, monitor, websocket, history 라우터 등록됨")
 else:
     logger.warning("⚠️ 라우터 등록 실패")
 

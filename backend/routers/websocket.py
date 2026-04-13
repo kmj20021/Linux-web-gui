@@ -25,13 +25,15 @@ router = APIRouter(prefix="/ws", tags=["WebSocket"])
 # 인증 및 헬퍼 함수
 # ============================================================
 
-VALID_TOKENS = {"test-token", "demo-token"}  # 실제는 DB에서 검증
+# auth.py의 login 엔드포인트에서 발급한 토큰
+VALID_TOKENS = {"test_token_123", "test-token", "demo-token"}  # 테스트용 토큰 목록
 
 def verify_token(token: Optional[str]) -> bool:
     """
     토큰 검증
     - token이 None이면 False
     - token이 VALID_TOKENS에 있으면 True
+    - 실제 프로덕션에서는 JWT 검증 필요
     """
     if not token:
         return False
