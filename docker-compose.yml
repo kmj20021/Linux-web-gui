@@ -3,40 +3,37 @@ services:
     build:
       context: ./frontend
     platform: linux/arm64
-    # 노트북 개발 시에는 필요하지만, 운영 환경(라즈베리)에서는 Nginx가 파일을 읽기만 하므로 
-    # frontend 컨테이너가 계속 떠 있을 필요가 없는 경우가 많습니다.
     image: minjegod/linux_gui_frontend:latest
-     # 빌드된 이미지를 사용하여 컨테이너를 실행하도록 설정
-    volumes:
-      - frontend_build:/app/dist #라즈베리 파이의 frontend_build와 컨테이너의 /app/dist를 연결
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   backend:
     build:
       context: ./backend
-    image: minjegod/linux_gui_backend:latest   # 이름 명시
+    image: minjegod/linux_gui_backend:latest
     platform: linux/arm64
     ports:
-      - "8000:8000" #8000번 포트로 접근을 시도하면 컨테이너의 8000번 포트로 연결
-    environment: # NAME=minje 처럼 변수를 지정하지 않으면 export 또는 .env파일 참조
+      - "8000:8000"
+    environment:
       - DATABASE_URL
       - SECRET_KEY
       - ALGORITHM
-    privileged: false # true일 경우 컨테이너가 컴퓨터의 하드웨어를 조작할 수 있음(위험)
+    privileged: false
     volumes:
-      - /var/log:/var/log:ro  # 실제 /var/log 폴더를 컨테이너의 /var/log로 마운트
-
-  nginx:
-    image: nginx:1.24-alpine
-    platform: linux/arm64
-    ports:
-      - "80:80"
-    volumes:
-      - frontend_build:/usr/share/nginx/html:ro 
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro 
-    depends_on:
-      - frontend
-      - backend
-    restart: always 
-
-volumes:
-  frontend_build:
+      - /var/log:/var/log:ro
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
