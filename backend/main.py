@@ -7,6 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 import asyncio
 
+# 로그 설정 (모든 임포트 전에 정의)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # 라우터 임포트
 try:
     from routers.monitor import router as monitor_router
@@ -26,9 +30,6 @@ try:
 except ImportError as e:
     db_import_success = False
     logger.error(f"데이터베이스/스케줄러 임포트 실패: {e}")
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Linux Web GUI API",

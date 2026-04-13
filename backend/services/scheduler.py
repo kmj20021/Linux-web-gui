@@ -12,7 +12,7 @@ import psutil
 
 from core.database import AsyncSessionLocal
 from core.models import MonitorSnapshot
-from routers.monitor import collect_metrics
+from routers.websocket import collect_metrics
 
 logger = logging.getLogger(__name__)
 
