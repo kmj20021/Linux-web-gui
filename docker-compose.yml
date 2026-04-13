@@ -5,12 +5,15 @@ services:
     platform: linux/arm64
     # 노트북 개발 시에는 필요하지만, 운영 환경(라즈베리)에서는 Nginx가 파일을 읽기만 하므로 
     # frontend 컨테이너가 계속 떠 있을 필요가 없는 경우가 많습니다.
+    image: minjegod/linux_gui_frontend:latest
+     # 빌드된 이미지를 사용하여 컨테이너를 실행하도록 설정
     volumes:
       - frontend_build:/app/dist #라즈베리 파이의 frontend_build와 컨테이너의 /app/dist를 연결
 
   backend:
     build:
       context: ./backend
+    image: minjegod/linux_gui_backend:latest   # 이름 명시
     platform: linux/arm64
     ports:
       - "8000:8000" #8000번 포트로 접근을 시도하면 컨테이너의 8000번 포트로 연결
