@@ -2,8 +2,9 @@
 WebSocket 실시간 모니터링 엔드포인트
 CPU·메모리·프로세스 1초 간격 브로드캐스트
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
+from urllib.parse import parse_qs
 import psutil
 import asyncio
 import logging
@@ -114,7 +115,7 @@ async def collect_metrics() -> MonitorMessage:
 # ============================================================
 
 @router.websocket("/monitor")
-async def websocket_monitor(websocket: WebSocket, token: Optional[str] = Query(None)):
+async def websocket_monitor(websocket: WebSocket):
     """
     WebSocket 실시간 모니터링 엔드포인트
     
@@ -130,6 +131,11 @@ async def websocket_monitor(websocket: WebSocket, token: Optional[str] = Query(N
         "timestamp": "2026-04-07T12:00:00+00:00"
     }
     """
+    # URL 쿼리 파라미터에서 토큰 추출
+    query_string = websocket.scope.get("query_string", b"").decode()
+    query_params = parse_qs(query_string)
+    token = query_params.get("token", [None])[0]
+    
     # 토큰 검증
     if not verify_token(token):
         await websocket.close(code=4001, reason="Unauthorized: Invalid or missing token")
