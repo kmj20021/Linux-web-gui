@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket 테스트</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+      font-weight: bold;
+    }
+    .status.connected {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .status.disconnected {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .data-box {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px 5px 10px 0;
+      cursor: pointer;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 WebSocket 연결 테스트</h1>
+
+    <div id="status" class="status disconnected">🔴 연결 안됨</div>
+
+    <div>
+      <button onclick="connectWS()">연결</button>
+      <button onclick="disconnectWS()">연결 해제</button>
+      <button onclick="clearLog()">로그 초기화</button>
+    </div>
+
+    <h3>연결 정보</h3>
+    <div class="data-box">
+      WS URL: ws://localhost:8000/ws/monitor?token=test_token_123
+    </div>
+
+    <h3>수신 데이터 (최근 10개)</h3>
+    <div id="data" class="data-box">대기 중...</div>
+  </div>
+
+  <script>
+    let ws = null;
+    let messages = [];
+    const maxMessages = 10;
+
+    function updateStatus(connected, message = '') {
+      const statusEl = document.getElementById('status');
+      if (connected) {
+        statusEl.className = 'status connected';
+        statusEl.textContent = '🟢 연결됨 ✓ ' + message;
+      } else {
+        statusEl.className = 'status disconnected';
+        statusEl.textContent = '🔴 연결 안됨 ✗ ' + message;
+      }
+    }
+
+    function addLog(data) {
+      const timestamp = new Date().toLocaleTimeString('ko-KR');
+      messages.unshift(`[${timestamp}]\n${JSON.stringify(data, null, 2)}`);
+      if (messages.length > maxMessages) {
+        messages.pop();
+      }
+      document.getElementById('data').textContent = messages.join('\n' + '='.repeat(50) + '\n');
+    }
+
+    function clearLog() {
+      messages = [];
+      document.getElementById('data').textContent = '로그 초기화됨';
+    }
+
+    function connectWS() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log('이미 연결되어 있습니다.');
+        return;
+      }
+
+      const url = 'ws://localhost:8000/ws/monitor?token=test_token_123';
+      console.log('WebSocket 연결 시도:', url);
+      updateStatus(false, '연결 중...');
+
+      try {
+        ws = new WebSocket(url);
+
+        ws.onopen = () => {
+          console.log('✅ WebSocket 연결 성공');
+          updateStatus(true, '연결됨');
+          addLog({ event: 'CONNECTED', message: 'WebSocket 연결 성공' });
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            console.log('📨 메시지 수신:', data);
+            addLog(data);
+          } catch (e) {
+            console.error('파싱 실패:', e);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('❌ WebSocket 에러:', error);
+          updateStatus(false, `에러: ${error.message || 'Unknown error'}`);
+          addLog({ event: 'ERROR', message: error.message });
+        };
+
+        ws.onclose = (event) => {
+          console.log(`🔌 WebSocket 연결 종료 (Code: ${event.code})`);
+          updateStatus(false, `연결 종료 (${event.code})`);
+          addLog({ event: 'CLOSED', code: event.code, reason: event.reason });
+          ws = null;
+        };
+      } catch (error) {
+        console.error('❌ WebSocket 생성 실패:', error);
+        updateStatus(false, `생성 실패: ${error.message}`);
+        addLog({ event: 'ERROR', message: error.message });
+      }
+    }
+
+    function disconnectWS() {
+      if (ws) {
+        ws.close();
+        ws = null;
+        updateStatus(false, '연결 해제됨');
+      }
+    }
+
+    // 페이지 로드 시 자동 연결 시도
+    window.addEventListener('load', () => {
+      console.log('페이지 로드 완료, WebSocket 연결 시도...');
+      setTimeout(connectWS, 1000);
+    });
+  </script>
+</body>
+</html>
