@@ -1,0 +1,134 @@
+/* Layout 컴포넌트 스타일 */
+
+:root {
+  --primary-color: #3498db;
+  --secondary-color: #2c3e50;
+  --success-color: #27ae60;
+  --danger-color: #e74c3c;
+  --warning-color: #f39c12;
+  --border-color: #ecf0f1;
+  --text-color: #2c3e50;
+  --bg-color: #f8f9fa;
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f3f4f6;
+  --color-bg-tertiary: #f9fafb;
+  --color-border: #e5e7eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.layout-container {
+  display: flex;
+  min-height: 100vh;
+  background: var(--color-bg-tertiary);
+}
+
+/* Main wrapper with sidebar offset */
+.main-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  margin-left: 200px;
+  min-height: 100vh;
+}
+
+/* Topbar */
+.topbar {
+  background: var(--color-bg-primary);
+  border-bottom: 0.5px solid var(--color-border);
+  padding: 0;
+  position: sticky;
+  top: 0;
+  z-index: 99;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.topbar-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.topbar-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+  padding: 0;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #40c057;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.status-text {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Main Content */
+.main-content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+/* Footer */
+.footer {
+  background: var(--color-bg-primary);
+  color: #6b7280;
+  text-align: center;
+  padding: 20px;
+  border-top: 0.5px solid var(--color-border);
+  margin-top: auto;
+  font-size: 12px;
+}
+
+.footer p {
+  margin: 0;
+  opacity: 0.8;
+}
+
+/* 반응형 디자인 */
+@media (max-width: 768px) {
+  .main-wrapper {
+    margin-left: 0;
+  }
+    border-radius: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .navbar-content {
+    padding: 0 15px;
+  }
+
+  .main-content {
+    padding: 20px 15px;
+  }
+}

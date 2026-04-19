@@ -84,7 +84,8 @@ async def collect_metrics() -> MonitorMessage:
                 pass
         
         processes.sort(key=lambda x: x.cpu_pct, reverse=True)
-        top_processes = processes[:5]
+        # 상위 30개 프로세스 (프론트에서 정렬/필터링 가능하게)
+        top_processes = processes[:30]
         
         # 타임스탐프
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -118,10 +119,12 @@ async def collect_metrics() -> MonitorMessage:
 async def websocket_monitor(websocket: WebSocket):
     """
     WebSocket 실시간 모니터링 엔드포인트
-    
+
     사용 예:
     - ws://localhost:8000/ws/monitor?token=test_token_123
-    
+
+    업데이트 주기: 5초 (개발자 확인 용이)
+
     메시지 형식:
     {
         "type": "monitor.snapshot",
@@ -158,14 +161,14 @@ async def websocket_monitor(websocket: WebSocket):
                 logger.info(f"🔌 연결이 이미 종료됨 (token={token})")
                 break
             
-            # 1초 간격 메트릭 수집 및 브로드캐스트
+            # 5초 간격 메트릭 수집 및 브로드캐스트 (개발자 확인 용이)
             try:
-                await asyncio.sleep(1)
-                
+                await asyncio.sleep(5)
+
                 # 재차 연결 상태 확인
                 if websocket.client_state == WebSocketState.DISCONNECTED:
                     break
-                
+
                 metrics = await collect_metrics()
                 await websocket.send_json(metrics.model_dump())
                 logger.debug(f"📤 메트릭 브로드캐스트: {metrics.timestamp}")
