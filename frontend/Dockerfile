@@ -17,14 +17,21 @@ WORKDIR /usr/share/nginx/html
 # 빌드된 dist 파일을 Nginx 서빙 경로로 복사
 COPY --from=builder /app/dist .
 
-# Nginx 설정 파일 복사
-COPY nginx.conf /etc/nginx/nginx.conf
+# Nginx 설정 파일 복사 및 시작 스크립트
+COPY nginx.conf /etc/nginx/nginx.conf.template
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Let's Encrypt 인증서 검증 디렉토리 생성
+RUN mkdir -p /var/www/certbot
 
 # 헬스체크
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost/api/health || exit 1
+    CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
 
-# 포트 노출 및 Nginx 시작
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# 포트 노출 (HTTP + HTTPS)
+EXPOSE 80 443
+
+# 시작 스크립트 실행
+CMD ["/start.sh"]
 

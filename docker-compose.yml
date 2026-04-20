@@ -1,3 +1,9 @@
+version: '3.8'
+
+volumes:
+  letsencrypt: # Let's Encrypt 인증서 저장 볼륨
+  certbot: # Certbot 검증용 볼륨
+
 services:
   frontend:
     build:
@@ -6,15 +12,21 @@ services:
     image: minjegod/linux_gui_frontend:latest
     ports:
       - "80:80"
+      - "443:443"
     depends_on:
       - backend
     restart: always
+    volumes:
+      - letsencrypt:/etc/letsencrypt # Let's Encrypt 인증서
+      - certbot:/var/www/certbot # Certbot 검증 디렉토리
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "https://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost} # AWS 도메인 설정
 
   backend:
     build:
@@ -37,3 +49,14 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  certbot:
+    image: certbot/certbot:latest
+    platform: linux/arm64
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot:/var/www/certbot
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'
+    restart: always
+    depends_on:
+      - frontend
