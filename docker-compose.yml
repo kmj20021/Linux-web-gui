@@ -8,7 +8,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    platform: linux/arm64
+    platform: linux/amd64
     image: minjegod/linux_gui_frontend:latest
     ports:
       - "80:80"
@@ -32,7 +32,7 @@ services:
     build:
       context: ./backend
     image: minjegod/linux_gui_backend:latest
-    platform: linux/arm64
+    platform: linux/amd64
     ports:
       - "8000:8000"
     environment:
@@ -52,7 +52,7 @@ services:
 
   certbot:
     image: certbot/certbot:latest
-    platform: linux/arm64
+    platform: linux/amd64
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot:/var/www/certbot
