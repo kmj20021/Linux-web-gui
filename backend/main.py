@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import asyncio
+import subprocess
 
 # 로그 설정 (모든 임포트 전에 정의)
 logging.basicConfig(level=logging.INFO)
@@ -23,14 +24,63 @@ except ImportError as e:
     import traceback
     traceback.print_exc()
 
+# shell 라우터는 독립적으로 임포트 (가상 셸 기능)
+try:
+    from routers.shell import router as shell_router
+    shell_import_success = True
+except ImportError as e:
+    shell_import_success = False
+    import traceback
+    traceback.print_exc()
+
+# network 라우터는 독립적으로 임포트 (실패해도 다른 라우터에 영향 없도록 분리)
+try:
+    from routers.network import router as network_router
+    network_import_success = True
+except ImportError as e:
+    network_import_success = False
+    import traceback
+    traceback.print_exc()
+
 # 데이터베이스 및 스케줄러 임포트
 try:
-    from core.database import init_db, close_db
+    from core.database import init_db, close_db, AsyncSessionLocal
+    from core.models import WebUser
+    from core.security import get_password_hash
     from services.scheduler import start_scheduler, stop_scheduler
+    from sqlalchemy import select
     db_import_success = True
 except ImportError as e:
     db_import_success = False
     logger.error(f"데이터베이스/스케줄러 임포트 실패: {e}")
+
+
+async def ensure_default_admin():
+    """
+    WebUser 테이블에 admin 계정이 없으면 기본 admin 계정을 생성한다.
+    - username: admin
+    - password: admin1234 (bcrypt 해시 저장)
+    - role: admin
+    이미 존재하면 아무 작업도 하지 않는다.
+    """
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(WebUser).where(WebUser.username == "admin")
+        )
+        existing = result.scalar_one_or_none()
+        if existing is not None:
+            logger.info("ℹ️ admin 계정이 이미 존재하여 시드 생성을 건너뜁니다")
+            return
+
+        admin = WebUser(
+            username="admin",
+            hashed_password=get_password_hash("admin1234"),
+            role="admin",
+            is_active=True,
+        )
+        session.add(admin)
+        await session.commit()
+        logger.info("✅ 기본 admin 계정 생성 완료 (username=admin)")
 
 app = FastAPI(
     title="Linux Web GUI API",
@@ -56,6 +106,20 @@ if logger_import_success:
 else:
     logger.warning("⚠️ 라우터 등록 실패")
 
+# network 라우터 등록 (/api prefix)
+if network_import_success:
+    app.include_router(network_router, prefix="/api")
+    logger.info("✅ network 라우터 등록됨")
+else:
+    logger.warning("⚠️ network 라우터 등록 실패")
+
+# shell 라우터 등록 (라우터 자체에 /ws, /api 경로 포함)
+if shell_import_success:
+    app.include_router(shell_router)
+    logger.info("✅ shell 라우터 등록됨 (WebSocket /ws/shell + REST /api/shell/*)")
+else:
+    logger.warning("⚠️ shell 라우터 등록 실패")
+
 @app.get("/api/health", tags=["Health"])
 async def health_check():
     """서버 상태 확인"""
@@ -65,7 +129,18 @@ async def health_check():
 async def startup_event():
     """서버 시작 시 이벤트"""
     logger.info("🚀 FastAPI 서버 시작")
-    
+
+    # Docker 이미지 확인
+    try:
+        result = subprocess.run(['docker', 'images', '-q', 'webterm:latest'],
+                               capture_output=True, text=True, timeout=5)
+        if result.stdout.strip():
+            logger.info("✅ webterm Docker 이미지 확인됨")
+        else:
+            logger.warning("⚠️ webterm:latest 이미지가 없습니다. 'docker build -t webterm:latest -f Dockerfile.webterm .' 를 실행하세요.")
+    except Exception as e:
+        logger.warning(f"⚠️ Docker 확인 실패: {e}")
+
     # 데이터베이스 초기화 (테이블 생성)
     if db_import_success:
         try:
@@ -73,6 +148,12 @@ async def startup_event():
             logger.info("✅ 데이터베이스 접속 및 테이블 생성 완료")
         except Exception as e:
             logger.error(f"❌ 데이터베이스 초기화 실패: {e}")
+
+        # 기본 admin 계정 시드 (없을 때만 생성)
+        try:
+            await ensure_default_admin()
+        except Exception as e:
+            logger.error(f"❌ 기본 admin 계정 시드 실패: {e}")
     
     # 스케줄러 시작 (1분 간격 스냅샷 저장)
     if db_import_success:

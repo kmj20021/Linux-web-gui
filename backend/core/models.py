@@ -2,7 +2,7 @@
 SQLAlchemy ORM 모델
 모니터링 스냅샷 데이터 저장
 """
-from sqlalchemy import Column, Integer, Float, String, DateTime, JSON
+from sqlalchemy import Column, Integer, Float, String, DateTime, JSON, Boolean
 from sqlalchemy.sql import func
 from core.database import Base
 from datetime import datetime, timezone
@@ -76,4 +76,43 @@ class MonitorSnapshot(Base):
             "mem_usage_pct": self.mem_usage_pct,
             "top_processes": self.top_processes,
             "recorded_at": self.recorded_at.isoformat() if self.recorded_at else None,
+        }
+
+
+class WebUser(Base):
+    """
+    웹 사용자 계정 (리눅스 시스템 계정과 완전히 분리)
+
+    - id: 기본키
+    - username: 로그인 아이디 (유니크)
+    - hashed_password: bcrypt 해시된 비밀번호
+    - role: "admin" 또는 "viewer"
+    - is_active: 계정 활성 상태
+    - created_at: 생성 시각
+    """
+
+    __tablename__ = "web_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(64), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(String(16), nullable=False, default="viewer")  # "admin" | "viewer"
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self):
+        return f"<WebUser(id={self.id}, username={self.username}, role={self.role})>"
+
+    def to_dict(self):
+        """모델을 딕셔너리로 변환 (해시된 비밀번호는 제외)"""
+        return {
+            "id": self.id,
+            "username": self.username,
+            "role": self.role,
+            "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }

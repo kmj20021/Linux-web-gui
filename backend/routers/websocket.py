@@ -5,6 +5,7 @@ CPU·메모리·프로세스 1초 간격 브로드캐스트
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from urllib.parse import parse_qs
+from jose import JWTError, jwt
 import psutil
 import asyncio
 import logging
@@ -17,6 +18,7 @@ from schemas.websocket import (
     ProcessSnapshot,
     MonitorMessage,
 )
+from core.security import SECRET_KEY, ALGORITHM
 
 logger = logging.getLogger(__name__)
 
@@ -26,19 +28,22 @@ router = APIRouter(prefix="/ws", tags=["WebSocket"])
 # 인증 및 헬퍼 함수
 # ============================================================
 
-# auth.py의 login 엔드포인트에서 발급한 토큰
-VALID_TOKENS = {"test_token_123", "test-token", "demo-token"}  # 테스트용 토큰 목록
-
 def verify_token(token: Optional[str]) -> bool:
     """
-    토큰 검증
-    - token이 None이면 False
-    - token이 VALID_TOKENS에 있으면 True
-    - 실제 프로덕션에서는 JWT 검증 필요
+    JWT 토큰 검증 (WebSocket 전용, bool 반환)
+
+    - token이 None/빈 문자열이면 False
+    - core.security 의 SECRET_KEY/ALGORITHM 으로 디코딩
+    - payload.sub 가 존재해야 True
+    - JWTError(만료, 서명 불일치 등) 발생 시 False
     """
     if not token:
         return False
-    return token in VALID_TOKENS
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub") is not None
+    except JWTError:
+        return False
 
 async def collect_metrics() -> MonitorMessage:
     """
@@ -121,7 +126,7 @@ async def websocket_monitor(websocket: WebSocket):
     WebSocket 실시간 모니터링 엔드포인트
 
     사용 예:
-    - ws://localhost:8000/ws/monitor?token=test_token_123
+    - ws://localhost:8000/ws/monitor?token=<JWT from /api/auth/login>
 
     업데이트 주기: 5초 (개발자 확인 용이)
 
@@ -145,9 +150,9 @@ async def websocket_monitor(websocket: WebSocket):
         await websocket.close(code=4001, reason="Invalid query parameters")
         return
     
-    # 토큰 검증
+    # 토큰 검증 (JWT)
     if not verify_token(token):
-        logger.warning(f"⚠️ WebSocket 인증 실패: token={token}, valid_tokens={VALID_TOKENS}")
+        logger.warning(f"⚠️ WebSocket 인증 실패 (invalid/expired JWT): token_present={bool(token)}")
         await websocket.close(code=4001, reason="Unauthorized: Invalid or missing token")
         return
     

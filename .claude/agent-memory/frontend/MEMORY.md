@@ -1,0 +1,2 @@
+- [Project: Auth System](project_auth.md) — JWT 인증 구현 완료: AuthContext, Login, ProtectedRoute, client.js 수정
+- [Project: Terminal Page](project_terminal.md) — 터미널+파일탐색기 통합 페이지 구현: xterm.js, /ws/shell WebSocket, /api/shell/fs REST

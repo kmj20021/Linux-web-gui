@@ -1,0 +1,214 @@
+.network-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 탭 네비게이션 */
+.tab-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--color-border, #e5e7eb);
+  margin-bottom: 0;
+}
+
+.tab-btn {
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: #374151;
+}
+
+.tab-btn.active {
+  color: #2d6a4f;
+  border-bottom-color: #2d6a4f;
+  font-weight: 600;
+}
+
+/* 탭 콘텐츠 영역 */
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 상태 뱃지 */
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.status-badge.up {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.status-badge.down {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* 인터페이스 테이블 전용 셀 */
+.iface-name-cell {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #111827;
+}
+
+.mac-cell {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.mtu-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #374151;
+}
+
+/* 트래픽 카드 그리드 */
+.traffic-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.traffic-card {
+  background: var(--color-bg-primary, #ffffff);
+  border-radius: 8px;
+  border: 0.5px solid var(--color-border, #e5e7eb);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.traffic-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--color-bg-secondary, #f3f4f6);
+  border-bottom: 0.5px solid var(--color-border, #e5e7eb);
+}
+
+.traffic-card-title {
+  font-family: 'Courier New', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.traffic-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.traffic-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.traffic-direction {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.traffic-direction-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+}
+
+.traffic-direction.rx .traffic-direction-label {
+  color: #2563eb;
+}
+
+.traffic-direction.tx .traffic-direction-label {
+  color: #9333ea;
+}
+
+.traffic-bytes {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-rate {
+  font-size: 12px;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+
+.traffic-divider {
+  width: 1px;
+  background: var(--color-border, #e5e7eb);
+  align-self: stretch;
+}
+
+/* 패킷 통계 테이블 수치 셀 */
+.num-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: #374151;
+}
+
+.num-cell.error-val {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.num-cell.drop-val {
+  color: #d97706;
+  font-weight: 600;
+}
+
+/* 갱신 시각 표시 */
+.last-updated {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: right;
+  padding: 0 4px;
+}
+
+/* 반응형 */
+@media (max-width: 768px) {
+  .tab-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .traffic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .processes-table th,
+  .processes-table td {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+}
