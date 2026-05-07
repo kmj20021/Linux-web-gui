@@ -69,14 +69,13 @@ function WebSocketStatus({ compact = false }) {
 
   const statusClass = status.isConnected ? 'connected' : 'disconnected'
   const statusText = status.isConnected ? '연결됨' : '연결 안 됨'
-  const statusIcon = status.isConnected ? '🟢' : '🔴'
 
   // Compact 모드 (topbar용)
   if (compact) {
     return (
       <div className={`websocket-status ${statusClass} compact`}>
         <span className="status-dot"></span>
-        <span className="status-text">{statusIcon} {statusText}</span>
+        <span className="status-text">{statusText}</span>
       </div>
     )
   }
@@ -88,7 +87,7 @@ function WebSocketStatus({ compact = false }) {
         <div className="status-indicator">
           <span className="status-dot"></span>
           <span className="status-label">
-            {statusIcon} {statusText}
+            {statusText}
           </span>
         </div>
         <div className="status-reconnect-info">

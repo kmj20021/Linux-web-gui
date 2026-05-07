@@ -48,6 +48,7 @@ function getPageTitle(pathname) {
     '/users': '사용자 관리',
     '/network': '네트워크',
     '/audit': '감사 로그',
+    '/terminal': '터미널',
   }
   return titles[pathname] || 'Linux Web GUI'
 }

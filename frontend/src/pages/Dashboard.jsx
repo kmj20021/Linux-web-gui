@@ -19,15 +19,16 @@ function Dashboard() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    // WebSocket 연결
-    wsManager.connect()
-      .then(() => {
+    // WebSocket 연결은 AuthContext에서 관리하므로 여기서는 호출하지 않음
+    // 이미 연결된 경우 즉시 로딩 해제
+    setIsLoading(!wsManager.isConnected)
+
+    // 연결 상태 변화 감지 - 연결되면 로딩 해제
+    const unsubscribeStatus = wsManager.onStatusChange((newStatus) => {
+      if (newStatus.isConnected) {
         setIsLoading(false)
-      })
-      .catch(error => {
-        console.error('WebSocket 연결 실패:', error)
-        setIsLoading(false)
-      })
+      }
+    })
 
     // WebSocket 데이터 수신
     const unsubscribe = wsManager.onData((data) => {
@@ -43,14 +44,15 @@ function Dashboard() {
 
     return () => {
       unsubscribe()
-      // 페이지 떠날 때 연결 유지 (다른 페이지에서도 필요할 수 있음)
+      unsubscribeStatus()
+      // 페이지 떠날 때 연결 유지 — AuthContext에서 생명주기 관리
     }
   }, [])
 
   return (
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>📊 시스템 대시보드</h1>
+        <h1>시스템 대시보드</h1>
         <p className="dashboard-subtitle">실시간 시스템 모니터링</p>
       </div>
 
@@ -69,7 +71,7 @@ function Dashboard() {
 
         {/* CPU 카드 */}
         <div className="dashboard-card">
-          <h2>🖥️ CPU</h2>
+          <h2>CPU</h2>
           <div className="card-content">
             <div className="metric-row">
               <span className="metric-label">전체 사용률</span>
@@ -98,7 +100,7 @@ function Dashboard() {
 
         {/* 메모리 카드 */}
         <div className="dashboard-card">
-          <h2>🧠 메모리</h2>
+          <h2>메모리</h2>
           <div className="card-content">
             <div className="metric-row">
               <span className="metric-label">사용률</span>
@@ -127,7 +129,7 @@ function Dashboard() {
 
         {/* 상위 프로세스 카드 */}
         <div className="dashboard-card process-card">
-          <h2>⚙️ 상위 프로세스 (CPU 기준)</h2>
+          <h2>상위 프로세스 (CPU 기준)</h2>
           <div className="card-content">
             {metrics.top_processes.length === 0 ? (
               <p className="no-data">프로세스 데이터 로드 중...</p>
@@ -156,7 +158,7 @@ function Dashboard() {
 
         {/* 타임스탐프 카드 */}
         <div className="dashboard-card timestamp-card">
-          <h2>🕐 마지막 업데이트</h2>
+          <h2>마지막 업데이트</h2>
           <div className="card-content">
             {metrics.timestamp ? (
               <>

@@ -32,7 +32,8 @@
   flex-direction: column;
   flex: 1;
   margin-left: 200px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* Topbar */
@@ -97,6 +98,15 @@
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  min-height: 0;
+}
+
+/* 터미널 페이지: padding 제거 및 overflow 숨김 */
+.main-content:has(.terminal-page) {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Footer */
@@ -119,13 +129,6 @@
 @media (max-width: 768px) {
   .main-wrapper {
     margin-left: 0;
-  }
-    border-radius: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .navbar-content {
-    padding: 0 15px;
   }
 
   .main-content {

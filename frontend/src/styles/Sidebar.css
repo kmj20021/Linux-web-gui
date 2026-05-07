@@ -171,6 +171,25 @@
   background: #f3f4f6;
 }
 
+.logout-button {
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.logout-button:hover {
+  color: #e74c3c;
+  background: #fee2e2;
+}
+
 .avatar {
   width: 24px;
   height: 24px;

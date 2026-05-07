@@ -1,4 +1,4 @@
-#!/mnt/c/Users/user/my_pj/linux-web-gui/backend/.venv/bin/python3
+#!/home/ubuntu/Linux-web-gui/backend/.venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

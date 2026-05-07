@@ -1,0 +1,33 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    bash \
+    curl \
+    wget \
+    vim \
+    nano \
+    python3 \
+    git \
+    net-tools \
+    iputils-ping \
+    dnsutils \
+    procps \
+    htop \
+    tree \
+    less \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 1000 user && \
+    useradd -u 1000 -g user -m -s /bin/bash user
+
+RUN echo 'export PS1="\u@\h:\w\$ "' >> /home/user/.bashrc && \
+    echo 'PROMPT_COMMAND='"'"'printf "\033]7;%s\007" "$PWD"'"'" >> /home/user/.bashrc && \
+    chown user:user /home/user/.bashrc
+
+USER user
+WORKDIR /home/user
+
+CMD ["/bin/bash", "--login"]
