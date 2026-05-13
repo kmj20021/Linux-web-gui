@@ -12,6 +12,7 @@ import Users from './pages/Users'
 import Network from './pages/Network'
 import Audit from './pages/Audit'
 import Terminal from './pages/Terminal'
+import NetworkDiagnostics from './pages/NetworkDiagnostics'
 import { monitoringAPI } from './api/client'
 import './App.css'
 
@@ -136,6 +137,16 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Terminal />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/network-diagnostics"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <NetworkDiagnostics />
                 </Layout>
               </ProtectedRoute>
             }

@@ -13,6 +13,7 @@ function Sidebar() {
         { path: '/dashboard', label: '대시보드', icon: dashboardIcon() },
         { path: '/monitor/processes', label: '프로세스', icon: processIcon() },
         { path: '/network', label: '네트워크', icon: networkIcon() },
+        { path: '/network-diagnostics', label: '네트워크 진단', icon: diagnosticsIcon() },
       ]
     },
     {
@@ -173,6 +174,16 @@ function terminalIcon() {
       <rect x="1" y="2" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
       <path d="M3.5 5L5.5 7L3.5 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M7 9h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function diagnosticsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3"/>
+      <path d="M9.5 9.5L13 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      <path d="M4 6h4M6 4v4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" opacity="0.7"/>
     </svg>
   )
 }
