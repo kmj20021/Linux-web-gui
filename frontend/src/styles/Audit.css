@@ -1,0 +1,73 @@
+/* Audit Page Styles */
+
+.audit-role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.audit-role-admin {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.audit-role-viewer {
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+
+.audit-refresh-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #f3f4f6;
+  border: 1px solid var(--color-border, #e5e7eb);
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.audit-refresh-btn:hover {
+  background: #e5e7eb;
+}
+
+.audit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-top: 0.5px solid var(--color-border, #e5e7eb);
+}
+
+.audit-page-btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--color-bg-primary, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.audit-page-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.audit-page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.audit-page-info {
+  font-size: 13px;
+  color: #6b7280;
+  min-width: 60px;
+  text-align: center;
+}

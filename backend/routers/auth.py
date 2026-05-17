@@ -10,13 +10,13 @@ import re
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from core.database import get_db
-from core.models import WebUser
+from core.models import LoginLog, WebUser
 from core.security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
@@ -99,10 +99,12 @@ class RegisterResponse(BaseModel):
 @router.post("/login", response_model=LoginResponse)
 async def login(
     request: LoginRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
     ID/PW 로그인 → JWT access_token 발급
+    로그인 성공 시 LoginLog 에 기록한다.
     """
     result = await db.execute(
         select(WebUser).where(WebUser.username == request.username)
@@ -127,6 +129,19 @@ async def login(
         data={"sub": user.username, "role": user.role},
         expires_delta=expires_delta,
     )
+
+    # 로그인 성공 이벤트 기록
+    ip_address: Optional[str] = None
+    if http_request.client is not None:
+        ip_address = http_request.client.host
+    db.add(
+        LoginLog(
+            username=user.username,
+            role=user.role,
+            ip_address=ip_address,
+        )
+    )
+    await db.commit()
 
     return LoginResponse(
         access_token=access_token,
@@ -172,7 +187,7 @@ async def register(
     - username: 3~20자, 영문/숫자/언더스코어만
     - password: 8자 이상
     - password_confirm: password와 일치해야 함
-    - 기본 role: "viewer" (회원가입으로 admin 생성 불가)
+    - 기본 role: "admin" (회원가입 시 admin 권한 발급)
     - is_active: True
     """
     # username 중복 확인
@@ -190,7 +205,7 @@ async def register(
     new_user = WebUser(
         username=request.username,
         hashed_password=get_password_hash(request.password),
-        role="viewer",
+        role="admin",
         is_active=True,
     )
     db.add(new_user)

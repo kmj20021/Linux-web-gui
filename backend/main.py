@@ -21,6 +21,7 @@ try:
     from routers.websocket import router as websocket_router
     from routers.history import router as history_router
     from routers.auth import router as auth_router
+    from routers.admin import router as admin_router
     logger_import_success = True
 except ImportError as e:
     logger_import_success = False
@@ -47,15 +48,33 @@ except ImportError as e:
 
 # 데이터베이스 및 스케줄러 임포트
 try:
-    from core.database import init_db, close_db, AsyncSessionLocal
+    from core.database import init_db, close_db, AsyncSessionLocal, engine
     from core.models import WebUser
     from core.security import get_password_hash
     from services.scheduler import start_scheduler, stop_scheduler
-    from sqlalchemy import select
+    from sqlalchemy import select, text
     db_import_success = True
 except ImportError as e:
     db_import_success = False
     logger.error(f"데이터베이스/스케줄러 임포트 실패: {e}")
+
+
+async def ensure_web_users_columns():
+    """
+    기존 SQLite DB 파일에 web_users.created_by 컬럼이 없을 경우 ALTER TABLE 로 추가한다.
+    SQLAlchemy 의 create_all() 은 이미 존재하는 테이블에 새 컬럼을 추가하지 않으므로,
+    스키마 변경 후 첫 기동 시 한 번 수동 마이그레이션이 필요하다.
+    이미 컬럼이 존재하면 예외가 발생하므로 try/except 로 안전하게 무시한다.
+    """
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("ALTER TABLE web_users ADD COLUMN created_by VARCHAR(64)")
+            )
+        logger.info("✅ web_users.created_by 컬럼 추가 완료")
+    except Exception as e:
+        # 이미 컬럼이 있으면 'duplicate column name' 에러 → 정상 케이스
+        logger.info(f"ℹ️ web_users.created_by 컬럼 마이그레이션 스킵: {e}")
 
 
 async def ensure_default_admin():
@@ -102,13 +121,14 @@ app.add_middleware(
 # 라우터 등록
 if logger_import_success:
     app.include_router(auth_router, prefix="/api")
+    app.include_router(admin_router, prefix="/api")
     app.include_router(cpu_router, prefix="/api")
     app.include_router(memory_router, prefix="/api")
     app.include_router(process_router, prefix="/api")
     app.include_router(disk_router, prefix="/api")
     app.include_router(websocket_router)  # /ws/는 nginx에서 별도 설정
     app.include_router(history_router, prefix="/api")
-    logger.info("✅ auth, monitor, websocket, history 라우터 등록됨")
+    logger.info("✅ auth, admin, monitor, websocket, history 라우터 등록됨")
 else:
     logger.warning("⚠️ 라우터 등록 실패")
 
@@ -154,6 +174,12 @@ async def startup_event():
             logger.info("✅ 데이터베이스 접속 및 테이블 생성 완료")
         except Exception as e:
             logger.error(f"❌ 데이터베이스 초기화 실패: {e}")
+
+        # 기존 DB 파일에 신규 컬럼이 없을 경우를 위한 마이그레이션
+        try:
+            await ensure_web_users_columns()
+        except Exception as e:
+            logger.error(f"❌ web_users 컬럼 마이그레이션 실패: {e}")
 
         # 기본 admin 계정 시드 (없을 때만 생성)
         try:

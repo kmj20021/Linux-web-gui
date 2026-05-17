@@ -1,0 +1,57 @@
+/* Forbidden (403) page for ProtectedRoute */
+
+.forbidden-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 57px - 61px);
+  background: transparent;
+}
+
+.forbidden-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 40px;
+  background: var(--color-bg-primary, #ffffff);
+  border: 0.5px solid var(--color-border, #e5e7eb);
+  border-radius: 12px;
+  max-width: 360px;
+  width: 100%;
+  text-align: center;
+}
+
+.forbidden-icon {
+  margin-bottom: 4px;
+  color: #9ca3af;
+}
+
+.forbidden-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.forbidden-desc {
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+.forbidden-btn {
+  margin-top: 8px;
+  padding: 10px 24px;
+  background: #2d6a4f;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.forbidden-btn:hover {
+  background: #1e4d38;
+}

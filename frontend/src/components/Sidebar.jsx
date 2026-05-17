@@ -6,7 +6,9 @@ function Sidebar() {
   const location = useLocation()
   const { user, logout } = useAuth()
 
-  const menuSections = [
+  const isAdmin = user?.role === 'admin'
+
+  const allMenuSections = [
     {
       label: '모니터링',
       items: [
@@ -20,17 +22,22 @@ function Sidebar() {
       label: '시스템',
       items: [
         { path: '/filesystem', label: '파일시스템', icon: filesystemIcon() },
-        { path: '/users', label: '사용자 관리', icon: usersIcon() },
-        { path: '/terminal', label: '터미널', icon: terminalIcon() },
+        ...(isAdmin ? [
+          { path: '/users', label: '사용자 관리', icon: usersIcon() },
+          { path: '/terminal', label: '터미널', icon: terminalIcon() },
+        ] : []),
       ]
     },
-    {
+    ...(isAdmin ? [{
       label: '관리',
       items: [
         { path: '/audit', label: '감사 로그', icon: auditIcon() },
       ]
-    }
+    }] : []),
   ]
+
+  // 아이템이 없는 섹션 제외
+  const menuSections = allMenuSections.filter(section => section.items.length > 0)
 
   const displayName = user?.username || 'admin'
   const displayRole = user?.role || '관리자'

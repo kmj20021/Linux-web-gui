@@ -192,6 +192,11 @@ async def websocket_shell(websocket: WebSocket):
         await websocket.close(code=4001, reason='Unauthorized')
         return
 
+    # admin role 만 터미널 접근 허용
+    if payload.get('role') != 'admin':
+        await websocket.close(code=4003, reason='Admin privileges required')
+        return
+
     username = payload['sub']
     session_id = _create_session_id(username)
     session = DockerSession(session_id=session_id, username=username)
