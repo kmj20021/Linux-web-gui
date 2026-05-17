@@ -99,9 +99,9 @@ function CPUChart() {
   return (
     <div className="cpu-chart-container">
       <div className="chart-header">
-        <h2>📊 실시간 CPU 사용률</h2>
+        <h2>실시간 CPU 사용률</h2>
         <div className="update-info">
-          🔄 5초 주기 업데이트 | 최근 60초 데이터
+          5초 주기 업데이트 | 최근 60초 데이터
         </div>
       </div>
 
@@ -110,22 +110,18 @@ function CPUChart() {
         <div className="stat-card current">
           <div className="stat-label">현재</div>
           <div className="stat-value">{stats.current}%</div>
-          <div className="stat-icon">⚡</div>
         </div>
         <div className="stat-card average">
           <div className="stat-label">평균</div>
           <div className="stat-value">{stats.average}%</div>
-          <div className="stat-icon">📈</div>
         </div>
         <div className="stat-card max">
           <div className="stat-label">최대</div>
           <div className="stat-value">{stats.max}%</div>
-          <div className="stat-icon">⬆️</div>
         </div>
         <div className="stat-card min">
           <div className="stat-label">최소</div>
           <div className="stat-value">{stats.min}%</div>
-          <div className="stat-icon">⬇️</div>
         </div>
       </div>
 
@@ -213,11 +209,11 @@ function CPUChart() {
       {/* 상세 정보 */}
       <div className="chart-info">
         <div className="info-item">
-          <span className="info-label">📊 데이터 포인트:</span>
+          <span className="info-label">데이터 포인트:</span>
           <span className="info-value">{cpuData.length}개</span>
         </div>
         <div className="info-item">
-          <span className="info-label">⏱️ 시간 범위:</span>
+          <span className="info-label">시간 범위:</span>
           <span className="info-value">
             {cpuData.length > 0
               ? `${cpuData[0].time} ~ ${cpuData[cpuData.length - 1].time}`
@@ -225,7 +221,7 @@ function CPUChart() {
           </span>
         </div>
         <div className="info-item">
-          <span className="info-label">🎯 업데이트 간격:</span>
+          <span className="info-label">업데이트 간격:</span>
           <span className="info-value">5초</span>
         </div>
       </div>

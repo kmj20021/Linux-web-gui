@@ -14,17 +14,14 @@ print("=" * 60)
 # monitor.py에서 라우터와 모델이 제대로 정의되고 임포트되는지 확인
 print("\n[1] monitor 라우터 임포트 테스트")
 try:
-    from routers.monitor import (
-        router,
-        CPUMetrics,
-        MemoryMetrics,
-        ProcessInfo,
-        DiskMetrics,
-        NetworkMetrics,
-        get_cpu_metrics,
-        get_memory_metrics,
-        get_top_processes,
-    )
+    from routers.cpu import router as cpu_router, get_cpu_metrics
+    from routers.memory import router as memory_router, get_memory_metrics
+    from routers.process import router as process_router, get_top_processes
+    from routers.disk import router as disk_router
+    from schemas.cpu import CPUMetrics
+    from schemas.memory import MemoryMetrics
+    from schemas.process import ProcessInfo
+    from schemas.disk import DiskMetrics
     print("✅ 라우터 및 모델 임포트 성공")
 except ImportError as e:
     print(f"❌ 임포트 실패: {e}")
@@ -38,7 +35,6 @@ models_and_fields = {
     "MemoryMetrics": ["total_gb", "used_gb", "free_gb", "buffers_gb", "cached_gb", "usage_pct"],
     "ProcessInfo": ["pid", "name", "cpu_pct", "mem_pct"],
     "DiskMetrics": ["path", "total_gb", "used_gb", "free_gb", "usage_pct"],
-    "NetworkMetrics": ["interface", "bytes_sent", "bytes_recv", "packets_sent", "packets_recv", "errin", "errout", "dropin", "dropout"],
 }
 
 for model_name, expected_fields in models_and_fields.items():
@@ -64,14 +60,21 @@ for model_name, expected_fields in models_and_fields.items():
 # 3. 엔드포인트 라우트 검증
 # API 경로들이 맞는지 확인 (예: /monitor/cpu, /monitor/memory 등)
 print("\n[3] FastAPI 라우터 경로 검증")
-routes = [r.path for r in router.routes]
+routes = []
+for r in cpu_router.routes:
+    routes.append(r.path)
+for r in memory_router.routes:
+    routes.append(r.path)
+for r in process_router.routes:
+    routes.append(r.path)
+for r in disk_router.routes:
+    routes.append(r.path)
 expected_routes = [
     "/cpu",
     "/memory",
     "/processes",
     "/disks",
     "/disk",
-    "/network",
 ]
 
 for route in expected_routes:

@@ -2,13 +2,10 @@
 Schemas 패키지
 모든 Pydantic DTO 모델 정의
 """
-from schemas.monitor import (
-    CPUMetrics,
-    MemoryMetrics,
-    DiskMetrics,
-    NetworkMetrics,
-    ProcessInfo,
-)
+from schemas.cpu import CPUMetrics
+from schemas.memory import MemoryMetrics
+from schemas.disk import DiskMetrics
+from schemas.process import ProcessInfo
 from schemas.history import (
     SnapshotItem,
     AggregatedSnapshot,
@@ -26,7 +23,6 @@ __all__ = [
     "CPUMetrics",
     "MemoryMetrics",
     "DiskMetrics",
-    "NetworkMetrics",
     "ProcessInfo",
     # History
     "SnapshotItem",

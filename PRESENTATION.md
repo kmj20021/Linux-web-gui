@@ -33,7 +33,10 @@
   │  ├ auth         │  JWT 로그인/회원가입
   │  ├ websocket    │  실시간 CPU·메모리 스트리밍
   │  ├ shell        │  Docker PTY 터미널
-  │  ├ monitor      │  REST 자원 조회
+  │  ├ cpu          │  CPU 사용률 조회
+  │  ├ memory       │  메모리 사용량 조회
+  │  ├ process      │  프로세스 목록 조회
+  │  ├ disk         │  디스크 사용 현황 조회
   │  ├ network      │  네트워크 인터페이스·트래픽
   │  └ history      │  모니터링 이력 집계
   └────────┬────────┘

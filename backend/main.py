@@ -14,7 +14,10 @@ logger = logging.getLogger(__name__)
 
 # 라우터 임포트
 try:
-    from routers.monitor import router as monitor_router
+    from routers.cpu import router as cpu_router
+    from routers.memory import router as memory_router
+    from routers.process import router as process_router
+    from routers.disk import router as disk_router
     from routers.websocket import router as websocket_router
     from routers.history import router as history_router
     from routers.auth import router as auth_router
@@ -99,7 +102,10 @@ app.add_middleware(
 # 라우터 등록
 if logger_import_success:
     app.include_router(auth_router, prefix="/api")
-    app.include_router(monitor_router, prefix="/api")
+    app.include_router(cpu_router, prefix="/api")
+    app.include_router(memory_router, prefix="/api")
+    app.include_router(process_router, prefix="/api")
+    app.include_router(disk_router, prefix="/api")
     app.include_router(websocket_router)  # /ws/는 nginx에서 별도 설정
     app.include_router(history_router, prefix="/api")
     logger.info("✅ auth, monitor, websocket, history 라우터 등록됨")
