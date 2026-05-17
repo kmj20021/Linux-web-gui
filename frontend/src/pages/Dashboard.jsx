@@ -51,9 +51,9 @@ function Dashboard() {
 
   return (
     <div className="dashboard">
-      <div className="dashboard-header">
+      <div className="page-header">
         <h1>시스템 대시보드</h1>
-        <p className="dashboard-subtitle">실시간 시스템 모니터링</p>
+        <p className="page-subtitle">실시간 시스템 모니터링</p>
       </div>
 
       {isLoading && (
@@ -71,8 +71,8 @@ function Dashboard() {
 
         {/* CPU 카드 */}
         <div className="dashboard-card">
-          <h2>CPU</h2>
-          <div className="card-content">
+          <div className="card-header">CPU</div>
+          <div className="card-body">
             <div className="metric-row">
               <span className="metric-label">전체 사용률</span>
               <div className="metric-value-with-bar">
@@ -100,8 +100,8 @@ function Dashboard() {
 
         {/* 메모리 카드 */}
         <div className="dashboard-card">
-          <h2>메모리</h2>
-          <div className="card-content">
+          <div className="card-header">메모리</div>
+          <div className="card-body">
             <div className="metric-row">
               <span className="metric-label">사용률</span>
               <div className="metric-value-with-bar">
@@ -129,37 +129,39 @@ function Dashboard() {
 
         {/* 상위 프로세스 카드 */}
         <div className="dashboard-card process-card">
-          <h2>상위 프로세스 (CPU 기준)</h2>
-          <div className="card-content">
+          <div className="card-header">상위 프로세스 (CPU 기준)</div>
+          <div className="card-body" style={{ padding: 0 }}>
             {metrics.top_processes.length === 0 ? (
               <p className="no-data">프로세스 데이터 로드 중...</p>
             ) : (
-              <div className="process-table">
-                <div className="table-header">
-                  <div className="col-pid">PID</div>
-                  <div className="col-name">프로세스</div>
-                  <div className="col-cpu">CPU %</div>
-                  <div className="col-mem">MEM %</div>
-                </div>
-                {metrics.top_processes.map((proc, idx) => (
-                  <div key={idx} className="table-row">
-                    <div className="col-pid">{proc.pid}</div>
-                    <div className="col-name" title={proc.name}>
-                      {proc.name}
-                    </div>
-                    <div className="col-cpu">{proc.cpu_pct.toFixed(1)}%</div>
-                    <div className="col-mem">{proc.mem_pct.toFixed(1)}%</div>
-                  </div>
-                ))}
-              </div>
+              <table className="process-table">
+                <thead>
+                  <tr>
+                    <th className="col-pid">PID</th>
+                    <th className="col-name">프로세스</th>
+                    <th className="col-cpu">CPU %</th>
+                    <th className="col-mem">MEM %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metrics.top_processes.map((proc, idx) => (
+                    <tr key={idx}>
+                      <td className="col-pid">{proc.pid}</td>
+                      <td className="col-name" title={proc.name}>{proc.name}</td>
+                      <td className="col-cpu">{proc.cpu_pct.toFixed(1)}%</td>
+                      <td className="col-mem">{proc.mem_pct.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
           </div>
         </div>
 
-        {/* 타임스탐프 카드 */}
+        {/* 타임스탬프 카드 */}
         <div className="dashboard-card timestamp-card">
-          <h2>마지막 업데이트</h2>
-          <div className="card-content">
+          <div className="card-header">마지막 업데이트</div>
+          <div className="card-body">
             {metrics.timestamp ? (
               <>
                 <div className="timestamp">
