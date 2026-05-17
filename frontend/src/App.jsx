@@ -104,7 +104,7 @@ function App() {
           <Route
             path="/users"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="admin">
                 <Layout>
                   <Users />
                 </Layout>
@@ -124,7 +124,7 @@ function App() {
           <Route
             path="/audit"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="admin">
                 <Layout>
                   <Audit />
                 </Layout>
@@ -134,7 +134,7 @@ function App() {
           <Route
             path="/terminal"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="admin">
                 <Layout>
                   <Terminal />
                 </Layout>

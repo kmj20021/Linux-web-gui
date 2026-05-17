@@ -89,6 +89,8 @@ class WebUser(Base):
     - role: "admin" 또는 "viewer"
     - is_active: 계정 활성 상태
     - created_at: 생성 시각
+    - created_by: 이 계정을 생성한 admin 의 username
+                  (자가 회원가입 계정은 NULL)
     """
 
     __tablename__ = "web_users"
@@ -103,6 +105,7 @@ class WebUser(Base):
         server_default=func.now(),
         nullable=False,
     )
+    created_by = Column(String(64), nullable=True)
 
     def __repr__(self):
         return f"<WebUser(id={self.id}, username={self.username}, role={self.role})>"
@@ -114,5 +117,43 @@ class WebUser(Base):
             "username": self.username,
             "role": self.role,
             "is_active": self.is_active,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_by": self.created_by,
+        }
+
+
+class LoginLog(Base):
+    """
+    로그인 이벤트 감사 로그
+
+    - id: 기본키
+    - username: 로그인한 사용자명
+    - role: 로그인 시점의 사용자 role
+    - ip_address: 클라이언트 IP (없으면 None)
+    - created_at: 로그인 발생 시각
+    """
+
+    __tablename__ = "login_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(64), nullable=False, index=True)
+    role = Column(String(16), nullable=False)
+    ip_address = Column(String(64), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+
+    def __repr__(self):
+        return f"<LoginLog(id={self.id}, username={self.username}, created_at={self.created_at})>"
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "username": self.username,
+            "role": self.role,
+            "ip_address": self.ip_address,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
