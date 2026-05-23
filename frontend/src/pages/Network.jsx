@@ -307,11 +307,138 @@ function PacketsTab() {
   )
 }
 
+// ── 탭 4: 포트 현황 ──────────────────────────────────────────
+function ConnectionsTab() {
+  const [connections, setConnections] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [updatedAt, setUpdatedAt] = useState(null)
+  const intervalRef = useRef(null)
+
+  const fetchData = async () => {
+    try {
+      const data = await networkAPI.getConnections()
+      setConnections(data)
+      setUpdatedAt(nowTime())
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+    intervalRef.current = setInterval(fetchData, 10000)
+    return () => clearInterval(intervalRef.current)
+  }, [])
+
+  function getStatusClass(status) {
+    if (!status) return ''
+    const s = status.toUpperCase()
+    if (s === 'LISTEN') return 'conn-listen'
+    if (s === 'ESTABLISHED') return 'conn-established'
+    if (s === 'TIME_WAIT' || s === 'CLOSE_WAIT') return 'conn-wait'
+    return ''
+  }
+
+  if (isLoading) {
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <p>포트 현황 로드 중...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="processes-container">
+        <div className="no-data">
+          <p>데이터를 불러오지 못했습니다: {error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="tab-content">
+      {updatedAt && (
+        <p className="last-updated">마지막 갱신: {updatedAt} (10초마다 자동 갱신)</p>
+      )}
+
+      <div className="processes-container">
+        <div className="info-bar">
+          <div className="info-item">
+            <span className="info-label">전체 연결</span>
+            <span className="info-value">{connections.length}</span>
+          </div>
+          <div className="info-item">
+            <span className="info-label">LISTEN</span>
+            <span className="info-value" style={{ color: '#16a34a' }}>
+              {connections.filter(c => c.status?.toUpperCase() === 'LISTEN').length}
+            </span>
+          </div>
+          <div className="info-item">
+            <span className="info-label">ESTABLISHED</span>
+            <span className="info-value" style={{ color: '#2563eb' }}>
+              {connections.filter(c => c.status?.toUpperCase() === 'ESTABLISHED').length}
+            </span>
+          </div>
+        </div>
+
+        <div className="table-wrapper">
+          {connections.length === 0 ? (
+            <div className="no-data">포트 데이터가 없습니다.</div>
+          ) : (
+            <table className="processes-table">
+              <thead>
+                <tr>
+                  <th>프로토콜</th>
+                  <th>로컬 주소:포트</th>
+                  <th>원격 주소:포트</th>
+                  <th>상태</th>
+                  <th>프로세스</th>
+                </tr>
+              </thead>
+              <tbody>
+                {connections.map((conn, idx) => (
+                  <tr key={idx}>
+                    <td className="conn-proto-cell">{conn.proto || '-'}</td>
+                    <td className="conn-addr-cell">
+                      {conn.local_ip && conn.local_port != null
+                        ? `${conn.local_ip}:${conn.local_port}`
+                        : '-'}
+                    </td>
+                    <td className="conn-addr-cell">
+                      {conn.remote_ip && conn.remote_port != null
+                        ? `${conn.remote_ip}:${conn.remote_port}`
+                        : '-'}
+                    </td>
+                    <td>
+                      <span className={`status-badge ${getStatusClass(conn.status)}`}>
+                        {conn.status || '-'}
+                      </span>
+                    </td>
+                    <td className="conn-process-cell">{conn.process_name || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── 메인 페이지 ──────────────────────────────────────────────
 const TABS = [
   { id: 'interfaces', label: '인터페이스 상태' },
   { id: 'traffic', label: '실시간 트래픽' },
   { id: 'packets', label: '패킷 통계' },
+  { id: 'connections', label: '포트 현황' },
 ]
 
 function NetworkPage() {
@@ -339,6 +466,7 @@ function NetworkPage() {
       {activeTab === 'interfaces' && <InterfacesTab />}
       {activeTab === 'traffic' && <TrafficTab />}
       {activeTab === 'packets' && <PacketsTab />}
+      {activeTab === 'connections' && <ConnectionsTab />}
     </div>
   )
 }

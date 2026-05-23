@@ -33,7 +33,7 @@ function Layout({ children }) {
 
         {/* Footer */}
         <footer className="footer">
-          <p>&copy; 2026 Linux Web GUI - 라즈베리 파이 기반 시스템 관리</p>
+          <p>&copy; 2026 Linux Web GUI - 리눅스 학습 사이트</p>
         </footer>
       </div>
     </div>

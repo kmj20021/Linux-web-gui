@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { wsManager } from '../api/client'
+import { wsManager, getAuthHeaders } from '../api/client'
 import '../styles/Processes.css'
 
 function ProcessesPage() {
@@ -7,6 +7,7 @@ function ProcessesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [sortBy, setSortBy] = useState('cpu') // 'cpu', 'memory', 'pid', 'name'
   const [sortOrder, setSortOrder] = useState('desc') // 'asc', 'desc'
+  const [killingPids, setKillingPids] = useState(new Set())
 
   useEffect(() => {
     // WebSocket 연결
@@ -67,6 +68,36 @@ function ProcessesPage() {
     return sorted
   }
 
+  const handleKill = async (pid, name) => {
+    const confirmed = window.confirm(`PID ${pid} (${name}) 프로세스를 종료하시겠습니까?`)
+    if (!confirmed) return
+
+    setKillingPids(prev => new Set(prev).add(pid))
+
+    try {
+      const response = await fetch(`/api/monitor/processes/${pid}/kill`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      })
+
+      if (response.ok) {
+        setProcesses(prev => prev.filter(p => p.pid !== pid))
+        alert(`PID ${pid} (${name}) 프로세스가 종료되었습니다.`)
+      } else {
+        const body = await response.json().catch(() => ({}))
+        alert(`프로세스 종료 실패: ${body.detail || response.status}`)
+      }
+    } catch (err) {
+      alert(`오류가 발생했습니다: ${err.message}`)
+    } finally {
+      setKillingPids(prev => {
+        const next = new Set(prev)
+        next.delete(pid)
+        return next
+      })
+    }
+  }
+
   const handleSort = (column) => {
     if (sortBy === column) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
@@ -81,7 +112,7 @@ function ProcessesPage() {
   return (
     <div className="processes-page">
       <div className="page-header">
-        <h1>⚙️ 프로세스 모니터링</h1>
+        <h1>프로세스 모니터링</h1>
         <p className="page-subtitle">상위 프로세스 목록 (PID·CPU·메모리 사용률)</p>
       </div>
 
@@ -127,12 +158,13 @@ function ProcessesPage() {
                   >
                     CPU % {sortBy === 'cpu' && (sortOrder === 'asc' ? '↑' : '↓')}
                   </th>
-                  <th 
+                  <th
                     className={`sortable mem-col ${sortBy === 'memory' ? 'active' : ''}`}
                     onClick={() => handleSort('memory')}
                   >
                     메모리 % {sortBy === 'memory' && (sortOrder === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="action-col">액션</th>
                 </tr>
               </thead>
               <tbody>
@@ -155,12 +187,21 @@ function ProcessesPage() {
                       <div className="cell-content">
                         <span className="value">{proc.mem_pct.toFixed(1)}%</span>
                         <div className="bar-bg">
-                          <div 
+                          <div
                             className="bar-fill mem-bar"
                             style={{ width: `${Math.min(proc.mem_pct, 100)}%` }}
                           ></div>
                         </div>
                       </div>
+                    </td>
+                    <td className="action-cell">
+                      <button
+                        className="kill-btn"
+                        disabled={killingPids.has(proc.pid)}
+                        onClick={() => handleKill(proc.pid, proc.name)}
+                      >
+                        {killingPids.has(proc.pid) ? '종료 중...' : 'Kill'}
+                      </button>
                     </td>
                   </tr>
                 ))}

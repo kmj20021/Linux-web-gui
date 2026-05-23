@@ -42,6 +42,17 @@ class NetworkPackets(BaseModel):
     dropout: int
 
 
+class NetworkConnection(BaseModel):
+    proto: str
+    local_ip: Optional[str]
+    local_port: Optional[int]
+    remote_ip: Optional[str]
+    remote_port: Optional[int]
+    status: str
+    pid: Optional[int]
+    process_name: Optional[str]
+
+
 @router.get("/interfaces", response_model=List[NetworkInterface])
 async def get_network_interfaces():
     """네트워크 인터페이스 목록 조회"""
@@ -150,6 +161,62 @@ async def get_network_packets():
                 "dropin": c.dropin,
                 "dropout": c.dropout,
             })
+        return result
+    except Exception:
+        return []
+
+
+@router.get("/connections", response_model=List[NetworkConnection])
+async def get_network_connections():
+    """
+    현재 시스템의 열린 포트 및 네트워크 연결 목록 조회.
+    - psutil.net_connections(kind='inet')로 TCP/UDP 연결을 조회한다.
+    - pid가 존재하면 프로세스 이름을 함께 반환(실패 시 None).
+    - 로컬 포트 기준 오름차순으로 정렬한다.
+    """
+    import psutil
+    try:
+        # 프로세스 이름 캐시 (pid 중복 조회 방지)
+        _proc_name_cache: Dict[int, Optional[str]] = {}
+
+        def _get_proc_name(pid: Optional[int]) -> Optional[str]:
+            if pid is None:
+                return None
+            if pid in _proc_name_cache:
+                return _proc_name_cache[pid]
+            try:
+                name = psutil.Process(pid).name()
+            except Exception:
+                name = None
+            _proc_name_cache[pid] = name
+            return name
+
+        result: List[Dict] = []
+        for c in psutil.net_connections(kind='inet'):
+            # 소켓 타입으로 proto 판별 (SOCK_STREAM=tcp, SOCK_DGRAM=udp)
+            try:
+                proto = "tcp" if c.type.name == "SOCK_STREAM" else "udp"
+            except Exception:
+                proto = "tcp"
+
+            local_ip = c.laddr.ip if c.laddr else None
+            local_port = c.laddr.port if c.laddr else None
+            remote_ip = c.raddr.ip if c.raddr else None
+            remote_port = c.raddr.port if c.raddr else None
+
+            result.append({
+                "proto": proto,
+                "local_ip": local_ip,
+                "local_port": local_port,
+                "remote_ip": remote_ip,
+                "remote_port": remote_port,
+                "status": c.status if c.status else "NONE",
+                "pid": c.pid,
+                "process_name": _get_proc_name(c.pid),
+            })
+
+        # 로컬 포트 기준 오름차순 정렬 (None은 맨 뒤로)
+        result.sort(key=lambda x: (x["local_port"] is None, x["local_port"] or 0))
         return result
     except Exception:
         return []
