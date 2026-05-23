@@ -42,7 +42,7 @@ function Home() {
   return (
     <div className="home">
       <h1>Linux Web GUI</h1>
-      <p>라즈베리 파이 기반 시스템 관리 시스템</p>
+      <p>리눅스 학습 사이트</p>
       <div className="status">{status}</div>
       <Link to="/dashboard" className="dashboard-link">
         대시보드로 이동

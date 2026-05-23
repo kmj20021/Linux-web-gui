@@ -195,6 +195,40 @@
   padding: 0 4px;
 }
 
+/* 포트 현황 탭 전용 */
+.conn-proto-cell {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+}
+
+.conn-addr-cell {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #374151;
+}
+
+.conn-process-cell {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.status-badge.conn-listen {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.status-badge.conn-established {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.status-badge.conn-wait {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
 /* 반응형 */
 @media (max-width: 768px) {
   .tab-btn {

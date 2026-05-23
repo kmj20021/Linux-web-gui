@@ -195,6 +195,14 @@ async def startup_event():
         except Exception as e:
             logger.error(f"❌ 스케줄러 시작 실패: {e}")
 
+    # 데모 프로세스 워치독 시작
+    try:
+        from services.demo_procs import start_demo_processes
+        start_demo_processes()
+        logger.info("✅ 데모 프로세스 워치독 시작됨")
+    except Exception as e:
+        logger.error(f"❌ 데모 프로세스 워치독 시작 실패: {e}")
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """서버 종료 시 이벤트"""
@@ -215,6 +223,14 @@ async def shutdown_event():
             logger.info("✅ 데이터베이스 연결 해제됨")
         except Exception as e:
             logger.error(f"❌ 데이터베이스 해제 실패: {e}")
+
+    # 데모 프로세스 워치독 종료
+    try:
+        from services.demo_procs import stop_demo_processes
+        stop_demo_processes()
+        logger.info("✅ 데모 프로세스 워치독 종료됨")
+    except Exception as e:
+        logger.error(f"❌ 데모 프로세스 워치독 종료 실패: {e}")
 
 if __name__ == "__main__":
     import uvicorn

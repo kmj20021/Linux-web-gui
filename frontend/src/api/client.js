@@ -158,6 +158,13 @@ export const networkAPI = {
     if (!response.ok) throw new Error(`API 실패: ${response.status}`)
     return await response.json()
   },
+  getConnections: async () => {
+    const response = await fetch(`${API_BASE_URL}/network/connections`, {
+      headers: getAuthHeaders(),
+    })
+    if (!response.ok) throw new Error(`API 실패: ${response.status}`)
+    return await response.json()
+  },
 }
 
 // ============================================================
