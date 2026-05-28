@@ -73,6 +73,29 @@
   background: #f85149;
 }
 
+/* 초기화 버튼 */
+.terminal-reset-btn {
+  background: #21262d;
+  border: 1px solid #e3b341;
+  color: #e3b341;
+  padding: 2px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.terminal-reset-btn:hover:not(:disabled) {
+  background: #e3b341;
+  color: #0d1117;
+}
+
+.terminal-reset-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* 재연결 버튼 */
 .terminal-reconnect-btn {
   background: #21262d;

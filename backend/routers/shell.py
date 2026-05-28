@@ -13,6 +13,7 @@ import fcntl
 import json
 import logging
 import os
+import shutil
 import struct
 import subprocess
 import termios
@@ -398,3 +399,50 @@ async def list_shell_sessions(authorization: Optional[str] = Header(None)):
         if s.username == username
     ]
     return {'sessions': sessions, 'count': len(sessions)}
+
+
+@router.delete('/api/shell/reset')
+async def reset_shell_home(authorization: Optional[str] = Header(None)):
+    token = _extract_token_from_header(authorization)
+    payload = _decode_token(token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Invalid or missing token',
+            headers={'WWW-Authenticate': 'Bearer'},
+        )
+    username = payload['sub']
+
+    # 활성 세션이 있으면 정리 후 진행
+    sids_to_remove = [
+        sid for sid, s in ACTIVE_SESSIONS.items() if s.username == username
+    ]
+    for sid in sids_to_remove:
+        session = ACTIVE_SESSIONS.get(sid)
+        if session is not None:
+            try:
+                session.cleanup()
+            except Exception as e:
+                logger.error(f'shell reset: cleanup failed (sid={sid}): {e}')
+        ACTIVE_SESSIONS.pop(sid, None)
+    if USER_LATEST_SESSION.get(username) in sids_to_remove or username in USER_LATEST_SESSION:
+        USER_LATEST_SESSION.pop(username, None)
+
+    home_dir = WEBTERM_HOME / username
+    try:
+        if home_dir.exists():
+            shutil.rmtree(home_dir)
+        home_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chown(home_dir, 1000, 1000)
+        except PermissionError:
+            pass
+    except Exception as e:
+        logger.error(f'shell reset failed (user={username}): {e}')
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Failed to reset home directory: {e}',
+        )
+
+    logger.info(f'shell reset: home directory cleared (user={username})')
+    return {'reset': True, 'username': username}

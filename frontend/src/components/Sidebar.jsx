@@ -31,7 +31,7 @@ function Sidebar() {
     ...(isAdmin ? [{
       label: '관리',
       items: [
-        { path: '/audit', label: '감사 로그', icon: auditIcon() },
+        { path: '/audit', label: '로그인 이력', icon: auditIcon() },
       ]
     }] : []),
   ]
