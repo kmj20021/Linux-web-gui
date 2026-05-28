@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import TerminalComponent from '../components/Terminal'
 import FileExplorer from '../components/FileExplorer'
 import { useAuth } from '../context/AuthContext'
+import { getAuthHeaders } from '../api/client'
 import '../styles/Terminal.css'
 
 function TerminalPage() {
@@ -59,6 +60,29 @@ function TerminalPage() {
     setTermKey(prev => prev + 1)
   }, [])
 
+  // 홈 디렉토리 초기화
+  const handleReset = useCallback(async () => {
+    const confirmed = window.confirm(
+      '터미널 홈 디렉토리의 모든 파일이 삭제됩니다. 계속하시겠습니까?'
+    )
+    if (!confirmed) return
+
+    try {
+      const response = await fetch('/api/shell/reset', {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        window.alert(body.detail || `초기화 실패: ${response.status}`)
+        return
+      }
+      handleReconnect()
+    } catch (err) {
+      window.alert(`초기화 중 오류가 발생했습니다: ${err.message}`)
+    }
+  }, [handleReconnect])
+
   const dotClass = connected
     ? 'terminal-status-dot'
     : wasEverConnected
@@ -96,6 +120,13 @@ function TerminalPage() {
               재연결
             </button>
           )}
+          <button
+            className="terminal-reset-btn"
+            onClick={handleReset}
+            title="홈 디렉토리 초기화"
+          >
+            초기화
+          </button>
         </div>
       </div>
 
