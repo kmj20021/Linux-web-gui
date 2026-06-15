@@ -282,6 +282,7 @@ function UserListPanel({ users, loading, error, onRefresh, onRoleChange, onToggl
 function CreateUserPanel({ onCreate, onDone }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [passwordConfirm, setPasswordConfirm] = useState('')
   const [role, setRole] = useState('viewer')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -293,6 +294,7 @@ function CreateUserPanel({ onCreate, onDone }) {
     const trimmedName = username.trim()
     if (!trimmedName) { setError('사용자명을 입력하세요.'); return }
     if (!password) { setError('비밀번호를 입력하세요.'); return }
+    if (password !== passwordConfirm) { setError('비밀번호가 일치하지 않습니다.'); return }
 
     setSubmitting(true)
     try {
@@ -316,52 +318,120 @@ function CreateUserPanel({ onCreate, onDone }) {
 
   return (
     <div className="processes-container ua-form-container">
-      <form className="ua-form" onSubmit={handleSubmit}>
-        <div className="ua-form-group">
-          <label className="ua-form-label">사용자명</label>
-          <input
-            className="ua-form-input"
-            type="text"
-            value={username}
-            onChange={e => { setUsername(e.target.value); setError('') }}
-            placeholder="사용자명 입력"
-            autoFocus
-            disabled={submitting}
-          />
-        </div>
-        <div className="ua-form-group">
-          <label className="ua-form-label">비밀번호</label>
-          <input
-            className="ua-form-input"
-            type="password"
-            value={password}
-            onChange={e => { setPassword(e.target.value); setError('') }}
-            placeholder="비밀번호 입력"
-            disabled={submitting}
-          />
-        </div>
-        <div className="ua-form-group">
-          <label className="ua-form-label">역할</label>
-          <select
-            className="ua-form-select"
-            value={role}
-            onChange={e => setRole(e.target.value)}
-            disabled={submitting}
-          >
-            <option value="viewer">viewer</option>
-            <option value="admin">admin</option>
-          </select>
-        </div>
-        {error && <div className="ua-form-error">{error}</div>}
-        <div className="ua-form-actions">
-          <button type="button" className="ua-cancel-btn" onClick={onDone} disabled={submitting}>
-            취소
-          </button>
-          <button type="submit" className="ua-submit-btn" disabled={submitting}>
-            {submitting ? '생성 중...' : '계정 생성'}
-          </button>
-        </div>
-      </form>
+      <div className="ua-create-layout">
+        <form className="ua-form" onSubmit={handleSubmit}>
+          <div className="ua-form-group">
+            <label className="ua-form-label">사용자명</label>
+            <input
+              className="ua-form-input"
+              type="text"
+              value={username}
+              onChange={e => { setUsername(e.target.value); setError('') }}
+              placeholder="사용자명 입력"
+              autoFocus
+              disabled={submitting}
+            />
+          </div>
+          <div className="ua-form-group">
+            <label className="ua-form-label">비밀번호</label>
+            <input
+              className="ua-form-input"
+              type="password"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError('') }}
+              placeholder="비밀번호 입력"
+              disabled={submitting}
+            />
+          </div>
+          <div className="ua-form-group">
+            <label className="ua-form-label">비밀번호 확인</label>
+            <input
+              className="ua-form-input"
+              type="password"
+              value={passwordConfirm}
+              onChange={e => { setPasswordConfirm(e.target.value); setError('') }}
+              placeholder="비밀번호 재입력"
+              disabled={submitting}
+            />
+          </div>
+          <div className="ua-form-group">
+            <label className="ua-form-label">역할</label>
+            <select
+              className="ua-form-select"
+              value={role}
+              onChange={e => setRole(e.target.value)}
+              disabled={submitting}
+            >
+              <option value="viewer">viewer</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          {error && <div className="ua-form-error">{error}</div>}
+          <div className="ua-form-actions">
+            <button type="button" className="ua-cancel-btn" onClick={onDone} disabled={submitting}>
+              취소
+            </button>
+            <button type="submit" className="ua-submit-btn" disabled={submitting}>
+              {submitting ? '생성 중...' : '계정 생성'}
+            </button>
+          </div>
+        </form>
+        <CliPreview username={username} role={role} />
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// CLI 미리보기 컴포넌트
+// ============================================================
+function CliPreview({ username, role }) {
+  const [copied, setCopied] = useState(false)
+  const displayName = username.trim() || '<username>'
+
+  const lines = [
+    { type: 'comment', text: '# 1. 사용자 생성' },
+    { type: 'cmd', text: `sudo useradd -m -s /bin/bash ${displayName}` },
+    { type: 'empty' },
+    { type: 'comment', text: '# 2. 비밀번호 설정' },
+    { type: 'cmd', text: `sudo passwd ${displayName}` },
+    ...(role === 'admin' ? [
+      { type: 'empty' },
+      { type: 'comment', text: '# 3. sudo 그룹 추가 (admin 역할)' },
+      { type: 'cmd', text: `sudo usermod -aG sudo ${displayName}` },
+    ] : []),
+  ]
+
+  const fullText = lines
+    .map(l => l.type === 'empty' ? '' : l.text)
+    .join('\n')
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(fullText).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <div className="ua-cli-preview">
+      <div className="ua-cli-preview-header">
+        <span className="ua-cli-preview-title">CLI 명령어 미리보기</span>
+        <button
+          type="button"
+          className={`ua-cli-copy-btn${copied ? ' copied' : ''}`}
+          onClick={handleCopy}
+        >
+          {copied ? '복사됨!' : '복사'}
+        </button>
+      </div>
+      <div className="ua-cli-code">
+        {lines.map((line, i) => (
+          line.type === 'empty'
+            ? <div key={i} className="ua-cli-line">&nbsp;</div>
+            : <div key={i} className={`ua-cli-line ua-cli-${line.type}`}>{line.text}</div>
+        ))}
+      </div>
     </div>
   )
 }

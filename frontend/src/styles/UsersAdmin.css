@@ -293,3 +293,92 @@
 .ua-back-btn:hover {
   background: #e5e7eb;
 }
+
+/* 계정 생성 2단 레이아웃 */
+.ua-create-layout {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+/* CLI 미리보기 패널 */
+.ua-cli-preview {
+  flex: 1;
+  min-width: 280px;
+  max-width: 420px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ua-cli-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f3f4f6;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.ua-cli-preview-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: 0.02em;
+}
+
+.ua-cli-code {
+  background: #1e2430;
+  padding: 16px;
+  font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  min-height: 120px;
+}
+
+.ua-cli-line {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.ua-cli-comment {
+  color: #6b7a99;
+}
+
+.ua-cli-cmd {
+  color: #e2e8f0;
+}
+
+.ua-cli-copy-btn {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.ua-cli-copy-btn:hover {
+  background: #e5e7eb;
+}
+
+.ua-cli-copy-btn.copied {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+/* 반응형: 좁은 화면에서 세로 배치 */
+@media (max-width: 768px) {
+  .ua-create-layout {
+    flex-direction: column;
+  }
+  .ua-cli-preview {
+    max-width: 100%;
+    width: 100%;
+  }
+}

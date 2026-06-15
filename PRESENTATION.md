@@ -444,7 +444,7 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 ### 백엔드 Docker 소켓 마운트
 
 웹 터미널 기능에서 사용자 요청마다 Docker 컨테이너를 생성해야 한다.  
-백엔드 컨테이너에 호스트의 Docker 소켓을 마운트하여 컨테이너 안에서 컨테이너를 실행(DinD 방식)한다.
+백엔드 컨테이너에 호스트의 Docker 소켓을 마운트하여 컨테이너 안에서 컨테이너를 실행(DooD 방식)한다.
 
 ```yaml
 backend:
