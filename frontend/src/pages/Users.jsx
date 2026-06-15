@@ -60,6 +60,61 @@ async function deleteUser(id) {
 }
 
 // ============================================================
+// 삭제 확인 모달 컴포넌트
+// ============================================================
+function DeleteConfirmModal({ user, onConfirm, onCancel }) {
+  const [copied, setCopied] = useState(false)
+  const command = `sudo userdel -r ${user.username}`
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
+  return (
+    <div className="ua-modal-overlay" onClick={onCancel}>
+      <div className="ua-modal" onClick={e => e.stopPropagation()}>
+        <div className="ua-modal-header">
+          <span className="ua-modal-title">계정 삭제 확인</span>
+        </div>
+        <div className="ua-modal-body">
+          <p className="ua-modal-desc">
+            <strong>{user.username}</strong> 계정을 삭제하려면 아래 Linux CLI 명령어를 참고하세요.<br />
+            이 작업은 되돌릴 수 없습니다.
+          </p>
+          <div className="ua-cli-preview ua-modal-cli">
+            <div className="ua-cli-preview-header">
+              <span className="ua-cli-preview-title">Linux CLI 명령어</span>
+              <button
+                type="button"
+                className={`ua-cli-copy-btn${copied ? ' copied' : ''}`}
+                onClick={handleCopy}
+              >
+                {copied ? '복사됨!' : '복사'}
+              </button>
+            </div>
+            <div className="ua-cli-code">
+              <div className="ua-cli-line ua-cli-comment"># 홈 디렉터리까지 함께 삭제</div>
+              <div className="ua-cli-line ua-cli-cmd">{command}</div>
+            </div>
+          </div>
+        </div>
+        <div className="ua-modal-footer">
+          <button type="button" className="ua-cancel-btn" onClick={onCancel}>
+            취소
+          </button>
+          <button type="button" className="ua-modal-confirm-btn" onClick={onConfirm}>
+            삭제 확인
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
 // 메인 컴포넌트
 // ============================================================
 function UsersPage() {
@@ -67,6 +122,7 @@ function UsersPage() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [deleteModal, setDeleteModal] = useState(null) // { id, username } | null
 
   const loadUsers = useCallback(async () => {
     setLoading(true)
@@ -103,14 +159,24 @@ function UsersPage() {
     }
   }
 
-  const handleDelete = async (id, username) => {
-    if (!window.confirm(`'${username}' 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return
+  const handleDelete = (id, username) => {
+    setDeleteModal({ id, username })
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal) return
+    const { id } = deleteModal
+    setDeleteModal(null)
     try {
       await deleteUser(id)
       setUsers(prev => prev.filter(u => u.id !== id))
     } catch (e) {
       alert(e.message)
     }
+  }
+
+  const handleDeleteCancel = () => {
+    setDeleteModal(null)
   }
 
   const handleCreate = async (username, password, role) => {
@@ -125,6 +191,14 @@ function UsersPage() {
 
   return (
     <div className="processes-page">
+      {deleteModal && (
+        <DeleteConfirmModal
+          user={deleteModal}
+          onConfirm={handleDeleteConfirm}
+          onCancel={handleDeleteCancel}
+        />
+      )}
+
       <div className="page-header">
         <h1>사용자 관리</h1>
         <p className="page-subtitle">웹 GUI 계정을 관리합니다.</p>

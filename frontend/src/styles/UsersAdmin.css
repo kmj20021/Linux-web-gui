@@ -372,6 +372,87 @@
   border-color: #a7f3d0;
 }
 
+/* 삭제 확인 모달 오버레이 */
+.ua-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* 모달 컨테이너 */
+.ua-modal {
+  background: var(--color-bg-primary, #ffffff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 10px;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+}
+
+.ua-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.ua-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.ua-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ua-modal-desc {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* 모달 내 CLI 미리보기 (너비 고정 해제) */
+.ua-modal-cli {
+  flex: none;
+  min-width: unset;
+  max-width: 100%;
+  width: 100%;
+}
+
+.ua-modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 삭제 확인 버튼 */
+.ua-modal-confirm-btn {
+  padding: 10px 20px;
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ua-modal-confirm-btn:hover {
+  background: #b91c1c;
+}
+
 /* 반응형: 좁은 화면에서 세로 배치 */
 @media (max-width: 768px) {
   .ua-create-layout {

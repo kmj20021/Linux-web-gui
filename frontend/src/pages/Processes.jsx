@@ -8,6 +8,7 @@ function ProcessesPage() {
   const [sortBy, setSortBy] = useState('cpu') // 'cpu', 'memory', 'pid', 'name'
   const [sortOrder, setSortOrder] = useState('desc') // 'asc', 'desc'
   const [killingPids, setKillingPids] = useState(new Set())
+  const [copiedPid, setCopiedPid] = useState(null)
 
   useEffect(() => {
     // WebSocket 연결
@@ -98,6 +99,24 @@ function ProcessesPage() {
     }
   }
 
+  const handleCopyCmd = (pid) => {
+    const cmd = `kill ${pid}`
+    navigator.clipboard.writeText(cmd).then(() => {
+      setCopiedPid(pid)
+      setTimeout(() => setCopiedPid(null), 1500)
+    }).catch(() => {
+      // 클립보드 API 미지원 환경 fallback
+      const el = document.createElement('textarea')
+      el.value = cmd
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+      setCopiedPid(pid)
+      setTimeout(() => setCopiedPid(null), 1500)
+    })
+  }
+
   const handleSort = (column) => {
     if (sortBy === column) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
@@ -164,6 +183,7 @@ function ProcessesPage() {
                   >
                     메모리 % {sortBy === 'memory' && (sortOrder === 'asc' ? '↑' : '↓')}
                   </th>
+                  <th className="cmd-col">터미널 명령어</th>
                   <th className="action-col">액션</th>
                 </tr>
               </thead>
@@ -193,6 +213,15 @@ function ProcessesPage() {
                           ></div>
                         </div>
                       </div>
+                    </td>
+                    <td className="cmd-cell">
+                      <button
+                        className={`cmd-code ${copiedPid === proc.pid ? 'copied' : ''}`}
+                        onClick={() => handleCopyCmd(proc.pid)}
+                        title="클릭하여 복사"
+                      >
+                        {copiedPid === proc.pid ? '복사됨' : `kill ${proc.pid}`}
+                      </button>
                     </td>
                     <td className="action-cell">
                       <button

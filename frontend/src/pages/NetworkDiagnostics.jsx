@@ -154,7 +154,6 @@ function EmptyIcon() {
 function NetworkDiagnostics() {
   const [selectedTool, setSelectedTool] = useState(null)
   const [results, setResults] = useState({})
-  const [runCounts, setRunCounts] = useState({})
   const [cmdLog, setCmdLog] = useState([
     { id: Date.now(), time: now(), type: 'comment', text: '# 네트워크 진단 도구 시작' },
   ])
@@ -180,7 +179,6 @@ function NetworkDiagnostics() {
   function handleRun(toolId, cmdStr, lines) {
     addLog(cmdStr)
     setResults(prev => ({ ...prev, [toolId]: lines }))
-    setRunCounts(prev => ({ ...prev, [toolId]: (prev[toolId] || 0) + 1 }))
     setModal(null)
   }
 
@@ -244,9 +242,6 @@ function NetworkDiagnostics() {
               >
                 <span className="nd-list-item-icon"><ToolIcon /></span>
                 <span className="nd-list-item-name">{t.label}</span>
-                {runCounts[t.id] > 0 && (
-                  <span className="nd-run-count">{runCounts[t.id]}</span>
-                )}
               </div>
             ))}
           </div>

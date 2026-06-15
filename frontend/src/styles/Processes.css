@@ -189,6 +189,40 @@
   background: linear-gradient(90deg, #60a5fa, #3b82f6);
 }
 
+.cmd-col {
+  width: 160px;
+}
+
+.cmd-cell {
+  white-space: nowrap;
+}
+
+.cmd-code {
+  display: inline-block;
+  padding: 3px 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #374151;
+  background: #e5e7eb;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.cmd-code:hover {
+  background: #d1d5db;
+  border-color: #9ca3af;
+}
+
+.cmd-code.copied {
+  background: #d1fae5;
+  color: #065f46;
+  border-color: #6ee7b7;
+}
+
 .action-col {
   width: 80px;
   text-align: center;
