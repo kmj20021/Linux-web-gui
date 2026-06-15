@@ -187,7 +187,7 @@ async def register(
     - username: 3~20자, 영문/숫자/언더스코어만
     - password: 8자 이상
     - password_confirm: password와 일치해야 함
-    - 기본 role: "admin" (회원가입 시 admin 권한 발급)
+    - 기본 role: "viewer"
     - is_active: True
     """
     # username 중복 확인
@@ -205,7 +205,7 @@ async def register(
     new_user = WebUser(
         username=request.username,
         hashed_password=get_password_hash(request.password),
-        role="admin",
+        role="viewer",
         is_active=True,
     )
     db.add(new_user)
