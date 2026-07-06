@@ -18,7 +18,10 @@ WORKDIR /usr/share/nginx/html
 COPY --from=builder /app/dist .
 
 # Nginx 설정 파일 복사 및 시작 스크립트
+# - nginx.conf       : HTTPS 설정 템플릿 (인증서 있을 때)
+# - nginx-http.conf  : HTTP 전용 설정 (인증서 없을 때 폴백)
 COPY nginx.conf /etc/nginx/nginx.conf.template
+COPY nginx-http.conf /etc/nginx/nginx-http.conf.template
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
