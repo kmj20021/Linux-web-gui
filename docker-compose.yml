@@ -20,7 +20,7 @@ services:
       - letsencrypt:/etc/letsencrypt # Let's Encrypt 인증서
       - certbot:/var/www/certbot # Certbot 검증 디렉토리
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -60,7 +60,9 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot:/var/www/certbot
-    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'
+    # 인자 없이 뜨면(docker compose up) 12시간 주기 renew 루프를 돈다.
+    # 인자가 있으면(docker compose run --rm certbot certonly ...) 그 명령을 그대로 certbot에 넘긴다.
+    entrypoint: /bin/sh -c 'if [ "$#" -gt 0 ]; then exec certbot "$@"; fi; trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;' --
     restart: always
     depends_on:
       - frontend
