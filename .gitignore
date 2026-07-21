@@ -27,5 +27,8 @@ frontend/.cache/
 .env
 .env.*
 
+# --- 개인 작업 및 히스토리에서 제거한 파일 ---
+nul
+
 # --- 도커 관련 ---
 .docker/

@@ -1,0 +1,8 @@
+# Main Agent: current highest-capability OpenAI model.
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+
+[agents]
+# Main(0) -> PM(1) -> Front/Back(2) -> Test(3)
+max_depth = 3
+max_threads = 6
