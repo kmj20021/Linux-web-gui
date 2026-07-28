@@ -11,7 +11,7 @@
 - **JWT 인증** — bcrypt 해시 저장, admin/viewer 역할 분리, WebSocket은 쿼리 파라미터 토큰 방식
 - **모니터링 이력** — APScheduler 1분 주기 스냅샷 저장, 기간·인터벌별 집계 API 제공
 - **네트워크 모니터링** — 인터페이스 목록, 순간 트래픽(KB/s), 패킷 통계, 연결 상태
-- **HTTPS 배포** — Nginx 리버스 프록시, TLS 1.2/1.3, HSTS, Rate Limit(10r/s), Certbot 자동 갱신
+- **HTTP 배포** — Nginx 리버스 프록시, Rate Limit(10r/s)
 
 ---
 
@@ -22,7 +22,7 @@
 | 프론트엔드 | React 18 + Vite, react-router-dom, recharts, @xterm/xterm |
 | 백엔드 | FastAPI + Uvicorn (Python 3.11), SQLAlchemy async, aiosqlite, APScheduler, psutil, bcrypt, JWT |
 | DB | SQLite (`linux_web_gui.db`) |
-| 배포 | Docker Compose, Nginx 1.24 (리버스 프록시 + TLS), Certbot (Let's Encrypt 자동 갱신) |
+| 배포 | Docker Compose, Nginx 1.24 (리버스 프록시) |
 
 ---
 
@@ -33,7 +33,7 @@
         │  HTTPS 443
         ▼
   ┌─────────────┐
-  │  Nginx 1.24 │  리버스 프록시, TLS 종료, 정적 파일 서빙
+  │  Nginx 1.24 │  리버스 프록시, 정적 파일 서빙
   └──────┬──────┘
          │ /api/*  → REST
          │ /ws/*   → WebSocket
