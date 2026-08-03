@@ -57,7 +57,7 @@ function Dashboard() {
       </div>
 
       {isLoading && (
-        <div className="loading">
+        <div className="loading" role="status">
           <div className="spinner"></div>
           <p>연결 중...</p>
         </div>
@@ -137,15 +137,15 @@ function Dashboard() {
               <table className="process-table">
                 <thead>
                   <tr>
-                    <th className="col-pid">PID</th>
-                    <th className="col-name">프로세스</th>
-                    <th className="col-cpu">CPU %</th>
-                    <th className="col-mem">MEM %</th>
+                    <th scope="col" className="col-pid">PID</th>
+                    <th scope="col" className="col-name">프로세스</th>
+                    <th scope="col" className="col-cpu">CPU %</th>
+                    <th scope="col" className="col-mem">MEM %</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {metrics.top_processes.map((proc, idx) => (
-                    <tr key={idx}>
+                  {metrics.top_processes.map((proc) => (
+                    <tr key={proc.pid}>
                       <td className="col-pid">{proc.pid}</td>
                       <td className="col-name" title={proc.name}>{proc.name}</td>
                       <td className="col-cpu">{proc.cpu_pct.toFixed(1)}%</td>

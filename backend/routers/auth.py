@@ -10,7 +10,7 @@ import re
 from datetime import timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -20,8 +20,10 @@ from core.models import LoginLog, WebUser
 from core.security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
+    get_current_admin,
     get_current_user,
     get_password_hash,
+    issue_ws_ticket,
     verify_password,
 )
 
@@ -57,6 +59,11 @@ class MeResponse(BaseModel):
     username: str
     role: str
     is_active: bool
+
+
+class WebSocketTicketResponse(BaseModel):
+    ticket: str
+    expires_in_seconds: int = Field(gt=0, le=60)
 
 
 class RegisterRequest(BaseModel):
@@ -111,18 +118,20 @@ async def login(
     )
     user: Optional[WebUser] = result.scalar_one_or_none()
 
-    if user is None or not verify_password(request.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    invalid_credentials = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
+    if user is None or not verify_password(request.password, user.hashed_password):
+        raise invalid_credentials
+
+    # 계약 §1 에 따라 비활성 사용자도 401 이며, 잘못된 비밀번호와 같은 응답을
+    # 준다. 비활성 계정에만 다른 코드나 문구를 주면 올바른 비밀번호를 가진
+    # 공격자가 자격 증명이 유효하다는 사실을 확인할 수 있다.
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user",
-        )
+        raise invalid_credentials
 
     expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
@@ -171,6 +180,35 @@ async def me(current_user: WebUser = Depends(get_current_user)):
         role=current_user.role,
         is_active=current_user.is_active,
     )
+
+
+async def _issue_ticket_response(
+    response: Response,
+    current_user: WebUser,
+    purpose: str,
+) -> WebSocketTicketResponse:
+    ticket, expires_in_seconds = await issue_ws_ticket(current_user.username, purpose)
+    response.headers["Cache-Control"] = "no-store"
+    return WebSocketTicketResponse(
+        ticket=ticket,
+        expires_in_seconds=expires_in_seconds,
+    )
+
+
+@router.post("/ws-tickets/monitor", response_model=WebSocketTicketResponse)
+async def issue_monitor_ws_ticket(
+    response: Response,
+    current_user: WebUser = Depends(get_current_user),
+) -> WebSocketTicketResponse:
+    return await _issue_ticket_response(response, current_user, "monitor")
+
+
+@router.post("/ws-tickets/shell", response_model=WebSocketTicketResponse)
+async def issue_shell_ws_ticket(
+    response: Response,
+    current_user: WebUser = Depends(get_current_admin),
+) -> WebSocketTicketResponse:
+    return await _issue_ticket_response(response, current_user, "shell")
 
 
 @router.post(

@@ -1,0 +1,6 @@
+services:
+  frontend:
+    environment:
+      APP_ENV: development
+    ports: !override
+      - "80:80"

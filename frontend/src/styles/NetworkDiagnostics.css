@@ -19,12 +19,27 @@
 }
 
 /* ========================
+   시뮬레이션 고지 (항상 표시)
+   ======================== */
+.nd-simulation-notice {
+  background: #fef3c7;
+  border: 0.5px solid #f59e0b;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  padding: 8px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #78350f;
+  flex-shrink: 0;
+}
+
+/* ========================
    상단 툴바
    ======================== */
 .nd-toolbar {
   background: var(--color-bg-primary);
   border: 0.5px solid var(--color-border);
-  border-radius: 8px 8px 0 0;
+  border-radius: 0;
   padding: 10px 14px;
   display: flex;
   align-items: center;
@@ -618,6 +633,18 @@
   padding: 8px 12px;
   border-radius: 6px;
   margin-bottom: 16px;
+}
+
+/* 입력 검증 오류 */
+.nd-modal-error {
+  background: #fef2f2;
+  border: 0.5px solid #fca5a5;
+  border-radius: 6px;
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  margin-top: 4px;
 }
 
 /* 체크박스 그룹 */

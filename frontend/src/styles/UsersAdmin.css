@@ -220,6 +220,17 @@
   padding: 8px 12px;
 }
 
+/* 목록에서 개별 CRUD 조작이 거부됐을 때의 사유 */
+.ua-action-error {
+  font-size: 13px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
 .ua-form-actions {
   display: flex;
   gap: 10px;
