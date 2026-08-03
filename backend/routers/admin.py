@@ -9,12 +9,13 @@ Admin 라우터 (admin role 전용)
 
 모든 엔드포인트는 admin role 사용자만 접근 가능하다.
 """
+import asyncio
 import re
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
@@ -27,6 +28,7 @@ _USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,20}$")
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+_admin_mutation_lock = asyncio.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -125,18 +127,10 @@ async def list_users(
     current_admin: WebUser = Depends(get_current_admin),
 ):
     """
-    WebUser 목록 반환.
-    - 본인 계정 (username == current_admin.username) +
-      본인이 생성한 계정 (created_by == current_admin.username) 만 반환한다.
+    모든 WebUser 목록을 ID 오름차순으로 반환한다.
     """
     result = await db.execute(
         select(WebUser)
-        .where(
-            or_(
-                WebUser.username == current_admin.username,
-                WebUser.created_by == current_admin.username,
-            )
-        )
         .order_by(WebUser.id.asc())
     )
     users = result.scalars().all()
@@ -197,35 +191,36 @@ async def update_user(
             detail="자기 자신의 계정은 변경할 수 없습니다.",
         )
 
-    result = await db.execute(select(WebUser).where(WebUser.id == user_id))
-    target: Optional[WebUser] = result.scalar_one_or_none()
-    if target is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="사용자를 찾을 수 없습니다.",
-        )
-
-    # 마지막 활성 admin 보호: 마지막 admin 을 viewer 로 강등하거나 비활성화 금지
-    becoming_non_admin = request.role is not None and request.role != "admin"
-    becoming_inactive = request.is_active is False
-    if target.role == "admin" and target.is_active and (
-        becoming_non_admin or becoming_inactive
-    ):
-        active_admins = await _count_active_admins(db)
-        if active_admins <= 1:
+    async with _admin_mutation_lock:
+        result = await db.execute(select(WebUser).where(WebUser.id == user_id))
+        target: Optional[WebUser] = result.scalar_one_or_none()
+        if target is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="마지막 admin 계정은 강등하거나 비활성화할 수 없습니다.",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="사용자를 찾을 수 없습니다.",
             )
 
-    if request.role is not None:
-        target.role = request.role
-    if request.is_active is not None:
-        target.is_active = request.is_active
+        # 마지막 활성 admin 보호: 마지막 admin 을 viewer 로 강등하거나 비활성화 금지
+        becoming_non_admin = request.role is not None and request.role != "admin"
+        becoming_inactive = request.is_active is False
+        if target.role == "admin" and target.is_active and (
+            becoming_non_admin or becoming_inactive
+        ):
+            active_admins = await _count_active_admins(db)
+            if active_admins <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="마지막 admin 계정은 강등하거나 비활성화할 수 없습니다.",
+                )
 
-    await db.commit()
-    await db.refresh(target)
-    return _to_user_out(target)
+        if request.role is not None:
+            target.role = request.role
+        if request.is_active is not None:
+            target.is_active = request.is_active
+
+        await db.commit()
+        await db.refresh(target)
+        return _to_user_out(target)
 
 
 @router.delete("/users/{user_id}", response_model=AdminUserDeleteResponse)
@@ -241,30 +236,31 @@ async def delete_user(
             detail="자기 자신의 계정은 삭제할 수 없습니다.",
         )
 
-    result = await db.execute(select(WebUser).where(WebUser.id == user_id))
-    target: Optional[WebUser] = result.scalar_one_or_none()
-    if target is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="사용자를 찾을 수 없습니다.",
-        )
-
-    # 마지막 활성 admin 삭제 금지
-    if target.role == "admin" and target.is_active:
-        active_admins = await _count_active_admins(db)
-        if active_admins <= 1:
+    async with _admin_mutation_lock:
+        result = await db.execute(select(WebUser).where(WebUser.id == user_id))
+        target: Optional[WebUser] = result.scalar_one_or_none()
+        if target is None:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="마지막 admin 계정은 삭제할 수 없습니다.",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="사용자를 찾을 수 없습니다.",
             )
 
-    await db.delete(target)
-    await db.commit()
+        # 마지막 활성 admin 삭제 금지
+        if target.role == "admin" and target.is_active:
+            active_admins = await _count_active_admins(db)
+            if active_admins <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="마지막 admin 계정은 삭제할 수 없습니다.",
+                )
 
-    return AdminUserDeleteResponse(
-        message="계정이 삭제되었습니다.",
-        user_id=user_id,
-    )
+        await db.delete(target)
+        await db.commit()
+
+        return AdminUserDeleteResponse(
+            message="계정이 삭제되었습니다.",
+            user_id=user_id,
+        )
 
 
 @router.get("/audit", response_model=List[LoginLogOut])

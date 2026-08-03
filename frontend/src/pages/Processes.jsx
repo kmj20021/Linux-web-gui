@@ -1,8 +1,39 @@
 import { useEffect, useState } from 'react'
-import { wsManager, getAuthHeaders } from '../api/client'
+import { wsManager, apiFetch } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 import '../styles/Processes.css'
 
+const SORT_COLUMNS = [
+  { key: 'pid', label: 'PID', className: '' },
+  { key: 'name', label: '프로세스명', className: '' },
+  { key: 'cpu', label: 'CPU %', className: 'cpu-col' },
+  { key: 'memory', label: '메모리 %', className: 'mem-col' },
+]
+
+// 정렬 가능한 열 머리글.
+// 정렬 상태는 aria-sort 로 알리고, 실제 조작은 키보드로도 닿는 button 이 맡는다.
+function SortableHeader({ label, className, isActive, sortOrder, onSort }) {
+  const ariaSort = isActive ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'
+
+  return (
+    <th
+      scope="col"
+      aria-sort={ariaSort}
+      className={`sortable ${className} ${isActive ? 'active' : ''}`.trim()}
+    >
+      <button type="button" className="sort-btn" onClick={onSort}>
+        {label}
+        <span className="sort-indicator" aria-hidden="true">
+          {isActive ? (sortOrder === 'asc' ? '↑' : '↓') : ''}
+        </span>
+      </button>
+    </th>
+  )
+}
+
 function ProcessesPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [processes, setProcesses] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [sortBy, setSortBy] = useState('cpu') // 'cpu', 'memory', 'pid', 'name'
@@ -76,20 +107,11 @@ function ProcessesPage() {
     setKillingPids(prev => new Set(prev).add(pid))
 
     try {
-      const response = await fetch(`/api/monitor/processes/${pid}/kill`, {
-        method: 'POST',
-        headers: getAuthHeaders(),
-      })
-
-      if (response.ok) {
-        setProcesses(prev => prev.filter(p => p.pid !== pid))
-        alert(`PID ${pid} (${name}) 프로세스가 종료되었습니다.`)
-      } else {
-        const body = await response.json().catch(() => ({}))
-        alert(`프로세스 종료 실패: ${body.detail || response.status}`)
-      }
+      await apiFetch(`/monitor/processes/${pid}/kill`, { method: 'POST' })
+      setProcesses(prev => prev.filter(p => p.pid !== pid))
+      alert(`PID ${pid} (${name}) 프로세스가 종료되었습니다.`)
     } catch (err) {
-      alert(`오류가 발생했습니다: ${err.message}`)
+      alert(`프로세스 종료 실패: ${err.message}`)
     } finally {
       setKillingPids(prev => {
         const next = new Set(prev)
@@ -136,7 +158,7 @@ function ProcessesPage() {
       </div>
 
       {isLoading && (
-        <div className="loading">
+        <div className="loading" role="status">
           <div className="spinner"></div>
           <p>데이터 로드 중...</p>
         </div>
@@ -159,44 +181,30 @@ function ProcessesPage() {
             <table className="processes-table">
               <thead>
                 <tr>
-                  <th 
-                    className={`sortable ${sortBy === 'pid' ? 'active' : ''}`}
-                    onClick={() => handleSort('pid')}
-                  >
-                    PID {sortBy === 'pid' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th 
-                    className={`sortable ${sortBy === 'name' ? 'active' : ''}`}
-                    onClick={() => handleSort('name')}
-                  >
-                    프로세스명 {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th 
-                    className={`sortable cpu-col ${sortBy === 'cpu' ? 'active' : ''}`}
-                    onClick={() => handleSort('cpu')}
-                  >
-                    CPU % {sortBy === 'cpu' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th
-                    className={`sortable mem-col ${sortBy === 'memory' ? 'active' : ''}`}
-                    onClick={() => handleSort('memory')}
-                  >
-                    메모리 % {sortBy === 'memory' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </th>
-                  <th className="cmd-col">터미널 명령어</th>
-                  <th className="action-col">액션</th>
+                  {SORT_COLUMNS.map(({ key, label, className }) => (
+                    <SortableHeader
+                      key={key}
+                      label={label}
+                      className={className}
+                      isActive={sortBy === key}
+                      sortOrder={sortOrder}
+                      onSort={() => handleSort(key)}
+                    />
+                  ))}
+                  {isAdmin && <th scope="col" className="cmd-col">터미널 명령어</th>}
+                  {isAdmin && <th scope="col" className="action-col">액션</th>}
                 </tr>
               </thead>
               <tbody>
-                {sortedProcesses.map((proc, idx) => (
-                  <tr key={idx} className={`process-row ${proc.cpu_pct > 50 ? 'high-cpu' : ''} ${proc.mem_pct > 50 ? 'high-mem' : ''}`}>
+                {sortedProcesses.map((proc) => (
+                  <tr key={proc.pid} className={`process-row ${proc.cpu_pct > 50 ? 'high-cpu' : ''} ${proc.mem_pct > 50 ? 'high-mem' : ''}`}>
                     <td className="pid-cell">{proc.pid}</td>
                     <td className="name-cell" title={proc.name}>{proc.name}</td>
                     <td className="cpu-cell">
                       <div className="cell-content">
                         <span className="value">{proc.cpu_pct.toFixed(1)}%</span>
                         <div className="bar-bg">
-                          <div 
+                          <div
                             className="bar-fill cpu-bar"
                             style={{ width: `${Math.min(proc.cpu_pct, 100)}%` }}
                           ></div>
@@ -214,24 +222,28 @@ function ProcessesPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="cmd-cell">
-                      <button
-                        className={`cmd-code ${copiedPid === proc.pid ? 'copied' : ''}`}
-                        onClick={() => handleCopyCmd(proc.pid)}
-                        title="클릭하여 복사"
-                      >
-                        {copiedPid === proc.pid ? '복사됨' : `kill ${proc.pid}`}
-                      </button>
-                    </td>
-                    <td className="action-cell">
-                      <button
-                        className="kill-btn"
-                        disabled={killingPids.has(proc.pid)}
-                        onClick={() => handleKill(proc.pid, proc.name)}
-                      >
-                        {killingPids.has(proc.pid) ? '종료 중...' : 'Kill'}
-                      </button>
-                    </td>
+                    {isAdmin && (
+                      <td className="cmd-cell">
+                        <button
+                          className={`cmd-code ${copiedPid === proc.pid ? 'copied' : ''}`}
+                          onClick={() => handleCopyCmd(proc.pid)}
+                          title="클릭하여 복사"
+                        >
+                          {copiedPid === proc.pid ? '복사됨' : `kill ${proc.pid}`}
+                        </button>
+                      </td>
+                    )}
+                    {isAdmin && (
+                      <td className="action-cell">
+                        <button
+                          className="kill-btn"
+                          disabled={killingPids.has(proc.pid)}
+                          onClick={() => handleKill(proc.pid, proc.name)}
+                        >
+                          {killingPids.has(proc.pid) ? '종료 중...' : 'Kill'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

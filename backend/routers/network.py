@@ -1,10 +1,28 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Optional, Dict
+import logging
 import time
 import threading
 
-router = APIRouter(prefix="/network", tags=["network"])
+from core.security import get_current_admin, get_current_user
+
+logger = logging.getLogger(__name__)
+
+
+def _collection_failed(resource: str) -> HTTPException:
+    """DATA-01: 수집 실패를 빈 목록으로 숨기지 않고 구조화된 503으로 구분한다."""
+    logger.warning("%s collection failed", resource)
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"error": "collection_failed", "resource": resource},
+    )
+
+router = APIRouter(
+    prefix="/network",
+    tags=["network"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # -----------------------------------------------------------------------------
@@ -85,7 +103,7 @@ async def get_network_interfaces():
                 })
         return interfaces
     except Exception:
-        return []
+        raise _collection_failed("network_interfaces")
 
 
 @router.get("/traffic", response_model=List[NetworkTraffic])
@@ -138,7 +156,7 @@ async def get_network_traffic():
 
         return result
     except Exception:
-        return []
+        raise _collection_failed("network_traffic")
 
 
 @router.get("/packets", response_model=List[NetworkPackets])
@@ -163,10 +181,14 @@ async def get_network_packets():
             })
         return result
     except Exception:
-        return []
+        raise _collection_failed("network_packets")
 
 
-@router.get("/connections", response_model=List[NetworkConnection])
+@router.get(
+    "/connections",
+    response_model=List[NetworkConnection],
+    dependencies=[Depends(get_current_admin)],
+)
 async def get_network_connections():
     """
     현재 시스템의 열린 포트 및 네트워크 연결 목록 조회.
@@ -219,4 +241,4 @@ async def get_network_connections():
         result.sort(key=lambda x: (x["local_port"] is None, x["local_port"] or 0))
         return result
     except Exception:
-        return []
+        raise _collection_failed("network_connections")

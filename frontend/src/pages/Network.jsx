@@ -24,6 +24,13 @@ function nowTime() {
   return new Date().toLocaleTimeString('ko-KR', { hour12: false })
 }
 
+// ── 유틸: 연결 목록의 안정적인 key (고유 id 가 없어 식별 필드를 조합) ──
+function connectionKey(conn) {
+  return [conn.proto, conn.local_ip, conn.local_port, conn.remote_ip, conn.remote_port, conn.pid]
+    .map(part => (part === null || part === undefined ? '-' : part))
+    .join('|')
+}
+
 // ── 탭 1: 인터페이스 상태 ────────────────────────────────────
 function InterfacesTab() {
   const [interfaces, setInterfaces] = useState([])
@@ -53,7 +60,7 @@ function InterfacesTab() {
 
   if (isLoading) {
     return (
-      <div className="loading">
+      <div className="loading" role="status">
         <div className="spinner"></div>
         <p>인터페이스 정보 로드 중...</p>
       </div>
@@ -63,7 +70,7 @@ function InterfacesTab() {
   if (error) {
     return (
       <div className="processes-container">
-        <div className="no-data">
+        <div className="no-data" role="alert">
           <p>데이터를 불러오지 못했습니다: {error}</p>
         </div>
       </div>
@@ -94,16 +101,16 @@ function InterfacesTab() {
           <table className="processes-table">
             <thead>
               <tr>
-                <th>인터페이스</th>
-                <th>상태</th>
-                <th>IPv4 주소</th>
-                <th>MAC 주소</th>
-                <th className="mtu-cell">MTU</th>
+                <th scope="col">인터페이스</th>
+                <th scope="col">상태</th>
+                <th scope="col">IPv4 주소</th>
+                <th scope="col">MAC 주소</th>
+                <th scope="col" className="mtu-cell">MTU</th>
               </tr>
             </thead>
             <tbody>
-              {interfaces.map((iface, idx) => (
-                <tr key={idx}>
+              {interfaces.map((iface) => (
+                <tr key={iface.name}>
                   <td className="iface-name-cell">{iface.name}</td>
                   <td>
                     <span className={`status-badge ${iface.status === 'up' ? 'up' : 'down'}`}>
@@ -152,7 +159,7 @@ function TrafficTab() {
 
   if (isLoading) {
     return (
-      <div className="loading">
+      <div className="loading" role="status">
         <div className="spinner"></div>
         <p>트래픽 데이터 로드 중...</p>
       </div>
@@ -162,7 +169,7 @@ function TrafficTab() {
   if (error) {
     return (
       <div className="processes-container">
-        <div className="no-data">
+        <div className="no-data" role="alert">
           <p>데이터를 불러오지 못했습니다: {error}</p>
         </div>
       </div>
@@ -181,8 +188,8 @@ function TrafficTab() {
         </div>
       ) : (
         <div className="traffic-grid">
-          {traffic.map((item, idx) => (
-            <div className="traffic-card" key={idx}>
+          {traffic.map((item) => (
+            <div className="traffic-card" key={item.name}>
               <div className="traffic-card-header">
                 <span className="traffic-card-title">{item.name}</span>
               </div>
@@ -238,7 +245,7 @@ function PacketsTab() {
 
   if (isLoading) {
     return (
-      <div className="loading">
+      <div className="loading" role="status">
         <div className="spinner"></div>
         <p>패킷 통계 로드 중...</p>
       </div>
@@ -248,7 +255,7 @@ function PacketsTab() {
   if (error) {
     return (
       <div className="processes-container">
-        <div className="no-data">
+        <div className="no-data" role="alert">
           <p>데이터를 불러오지 못했습니다: {error}</p>
         </div>
       </div>
@@ -269,18 +276,18 @@ function PacketsTab() {
             <table className="processes-table">
               <thead>
                 <tr>
-                  <th>인터페이스</th>
-                  <th className="num-cell">수신 패킷</th>
-                  <th className="num-cell">송신 패킷</th>
-                  <th className="num-cell">수신 오류</th>
-                  <th className="num-cell">송신 오류</th>
-                  <th className="num-cell">수신 드롭</th>
-                  <th className="num-cell">송신 드롭</th>
+                  <th scope="col">인터페이스</th>
+                  <th scope="col" className="num-cell">수신 패킷</th>
+                  <th scope="col" className="num-cell">송신 패킷</th>
+                  <th scope="col" className="num-cell">수신 오류</th>
+                  <th scope="col" className="num-cell">송신 오류</th>
+                  <th scope="col" className="num-cell">수신 드롭</th>
+                  <th scope="col" className="num-cell">송신 드롭</th>
                 </tr>
               </thead>
               <tbody>
-                {packets.map((item, idx) => (
-                  <tr key={idx}>
+                {packets.map((item) => (
+                  <tr key={item.name}>
                     <td className="iface-name-cell">{item.name}</td>
                     <td className="num-cell">{item.packets_recv?.toLocaleString() ?? '-'}</td>
                     <td className="num-cell">{item.packets_sent?.toLocaleString() ?? '-'}</td>
@@ -345,7 +352,7 @@ function ConnectionsTab() {
 
   if (isLoading) {
     return (
-      <div className="loading">
+      <div className="loading" role="status">
         <div className="spinner"></div>
         <p>포트 현황 로드 중...</p>
       </div>
@@ -355,7 +362,7 @@ function ConnectionsTab() {
   if (error) {
     return (
       <div className="processes-container">
-        <div className="no-data">
+        <div className="no-data" role="alert">
           <p>데이터를 불러오지 못했습니다: {error}</p>
         </div>
       </div>
@@ -395,16 +402,16 @@ function ConnectionsTab() {
             <table className="processes-table">
               <thead>
                 <tr>
-                  <th>프로토콜</th>
-                  <th>로컬 주소:포트</th>
-                  <th>원격 주소:포트</th>
-                  <th>상태</th>
-                  <th>프로세스</th>
+                  <th scope="col">프로토콜</th>
+                  <th scope="col">로컬 주소:포트</th>
+                  <th scope="col">원격 주소:포트</th>
+                  <th scope="col">상태</th>
+                  <th scope="col">프로세스</th>
                 </tr>
               </thead>
               <tbody>
-                {connections.map((conn, idx) => (
-                  <tr key={idx}>
+                {connections.map((conn) => (
+                  <tr key={connectionKey(conn)}>
                     <td className="conn-proto-cell">{conn.proto || '-'}</td>
                     <td className="conn-addr-cell">
                       {conn.local_ip && conn.local_port != null
@@ -435,14 +442,17 @@ function ConnectionsTab() {
 
 // ── 메인 페이지 ──────────────────────────────────────────────
 const TABS = [
-  { id: 'interfaces', label: '인터페이스 상태' },
-  { id: 'traffic', label: '실시간 트래픽' },
-  { id: 'packets', label: '패킷 통계' },
-  { id: 'connections', label: '포트 현황' },
+  { id: 'interfaces', label: '인터페이스 상태', Panel: InterfacesTab },
+  { id: 'traffic', label: '실시간 트래픽', Panel: TrafficTab },
+  { id: 'packets', label: '패킷 통계', Panel: PacketsTab },
+  { id: 'connections', label: '포트 현황', Panel: ConnectionsTab },
 ]
 
 function NetworkPage() {
   const [activeTab, setActiveTab] = useState('interfaces')
+
+  const active = TABS.find(tab => tab.id === activeTab)
+  const ActivePanel = active.Panel
 
   return (
     <div className="network-page">
@@ -451,22 +461,30 @@ function NetworkPage() {
         <p className="page-subtitle">인터페이스 상태, 실시간 트래픽, 패킷 통계</p>
       </div>
 
-      <nav className="tab-nav">
+      <div className="tab-nav" role="tablist" aria-label="네트워크 보기">
         {TABS.map(tab => (
           <button
             key={tab.id}
+            id={`network-tab-${tab.id}`}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`network-panel-${tab.id}`}
             className={`tab-btn${activeTab === tab.id ? ' active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
           </button>
         ))}
-      </nav>
+      </div>
 
-      {activeTab === 'interfaces' && <InterfacesTab />}
-      {activeTab === 'traffic' && <TrafficTab />}
-      {activeTab === 'packets' && <PacketsTab />}
-      {activeTab === 'connections' && <ConnectionsTab />}
+      <div
+        role="tabpanel"
+        id={`network-panel-${active.id}`}
+        aria-labelledby={`network-tab-${active.id}`}
+      >
+        <ActivePanel />
+      </div>
     </div>
   )
 }

@@ -98,6 +98,29 @@
   color: #2d6a4f;
 }
 
+/* 정렬 조작은 키보드로도 닿아야 하므로 머리글 안의 button 이 맡는다. */
+.processes-table th.sortable .sort-btn {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.processes-table th.sortable .sort-btn:focus-visible {
+  outline: 2px solid #2d6a4f;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.processes-table th.sortable .sort-indicator {
+  min-width: 8px;
+}
+
 .processes-table tbody tr {
   border-bottom: 0.5px solid var(--color-border, #e5e7eb);
   transition: background 0.2s;

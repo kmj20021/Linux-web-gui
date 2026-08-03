@@ -1,5 +1,3 @@
-version: '3.8'
-
 volumes:
   letsencrypt: # Let's Encrypt 인증서 저장 볼륨
   certbot: # Certbot 검증용 볼륨
@@ -26,26 +24,28 @@ services:
       retries: 3
       start_period: 10s
     environment:
-      - DOMAIN_NAME=${DOMAIN_NAME:-localhost} # AWS 도메인 설정
+      - DOMAIN_NAME=${DOMAIN_NAME:?DOMAIN_NAME is required}
 
   backend:
     build:
       context: ./backend
     image: minjegod/linux_gui_backend:latest
     platform: linux/amd64
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
-      - DATABASE_URL
-      - SECRET_KEY
+      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL is required}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - ALGORITHM
       - ACCESS_TOKEN_EXPIRE_MINUTES=1440
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
     privileged: false
     volumes:
       - /var/log:/var/log:ro
       - ./data/linux_web_gui.db:/app/linux_web_gui.db
-      - /var/run/docker.sock:/var/run/docker.sock
       - /home/webterm:/home/webterm
+    depends_on:
+      - docker-socket-proxy
     restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
@@ -53,6 +53,20 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      - PING=1
+      - VERSION=1
+      - IMAGES=1
+      - CONTAINERS=1
+      - POST=1
+    expose:
+      - "2375"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: always
 
   certbot:
     image: certbot/certbot:latest

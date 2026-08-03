@@ -1,18 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getAuthHeaders } from '../api/client'
+import { apiFetch } from '../api/client'
 import '../styles/Processes.css'
 import '../styles/Audit.css'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 const PAGE_LIMIT = 20
 
-async function fetchAuditLogs(page, limit) {
-  const res = await fetch(
-    `${API_BASE_URL}/admin/audit?page=${page}&limit=${limit}`,
-    { headers: getAuthHeaders() }
-  )
-  if (!res.ok) throw new Error(`감사 로그 조회 실패: ${res.status}`)
-  return res.json()
+function fetchAuditLogs(page, limit) {
+  return apiFetch(`/admin/audit?page=${page}&limit=${limit}`)
 }
 
 function AuditPage() {

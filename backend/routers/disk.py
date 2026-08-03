@@ -1,13 +1,21 @@
 """
 디스크 모니터링 엔드포인트
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 import psutil
+import logging
 from typing import List
 
+from core.security import get_current_user
 from schemas.disk import DiskMetrics
 
-router = APIRouter(prefix="/monitor", tags=["디스크"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(
+    prefix="/monitor",
+    tags=["디스크"],
+    dependencies=[Depends(get_current_user)],
+)
 
 # ============================================================
 # 디스크 엔드포인트 (3번 목표)
@@ -34,11 +42,17 @@ async def get_disk_metrics():
                     "usage_pct": usage.percent
                 })
             except (OSError, PermissionError):
+                # 개별 파티션 접근 실패는 건너뛰고 부분 결과를 유지한다(빈 목록은 정상).
                 pass
 
         return disks
-    except Exception:
-        return []
+    except Exception as e:
+        # DATA-01: 전체 수집 실패는 빈 목록으로 숨기지 않고 구조화된 503으로 구분한다.
+        logger.warning("disk list collection failed: %s", type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "collection_failed", "resource": "disks"},
+        )
 
 @router.get("/disk", response_model=DiskMetrics)
 async def get_disk_usage(path: str = "/"):
@@ -55,11 +69,10 @@ async def get_disk_usage(path: str = "/"):
             "free_gb": round(usage.free / (1024**3), 2),
             "usage_pct": usage.percent
         }
-    except Exception:
-        return {
-            "path": path,
-            "total_gb": 0.0,
-            "used_gb": 0.0,
-            "free_gb": 0.0,
-            "usage_pct": 0.0
-        }
+    except Exception as e:
+        # DATA-01: 수집 실패를 0값으로 숨기지 않고 구조화된 503으로 구분 가능하게 한다.
+        logger.warning("disk usage collection failed: %s", type(e).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "collection_failed", "resource": "disk"},
+        )

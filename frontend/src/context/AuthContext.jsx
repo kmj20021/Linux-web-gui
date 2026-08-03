@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, wsManager } from '../api/client'
+import { authAPI, onAuthExpired, wsManager } from '../api/client'
 
 const AuthContext = createContext(null)
 
@@ -10,6 +10,20 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const navigate = useNavigate()
+
+  const clearSession = useCallback(() => {
+    wsManager.disconnect()
+    localStorage.removeItem('auth_token')
+    setToken(null)
+    setUser(null)
+    setIsAuthenticated(false)
+  }, [])
+
+  // 어느 페이지에서든 REST 401 이 나오면 같은 방식으로 세션을 정리한다.
+  useEffect(() => onAuthExpired(() => {
+    clearSession()
+    navigate('/login')
+  }), [clearSession, navigate])
 
   // 앱 시작 시 localStorage 토큰 검증
   useEffect(() => {
@@ -27,9 +41,13 @@ export function AuthProvider({ children }) {
         setIsAuthenticated(true)
         // 세션 복원 성공 시 WebSocket 연결
         wsManager.connect().catch(err => {
+          if (err.status === 401) {
+            clearSession()
+            return
+          }
           console.error('세션 복원 후 WebSocket 연결 실패:', err)
         })
-      } catch (error) {
+      } catch {
         // 토큰이 유효하지 않으면 제거
         localStorage.removeItem('auth_token')
       } finally {
@@ -38,7 +56,7 @@ export function AuthProvider({ children }) {
     }
 
     restoreSession()
-  }, [])
+  }, [clearSession])
 
   const login = useCallback(async (username, password) => {
     const data = await authAPI.login(username, password)
@@ -51,11 +69,15 @@ export function AuthProvider({ children }) {
 
     // 로그인 성공 시 WebSocket 연결
     wsManager.connect().catch(err => {
+      if (err.status === 401) {
+        clearSession()
+        return
+      }
       console.error('로그인 후 WebSocket 연결 실패:', err)
     })
 
     return data
-  }, [])
+  }, [clearSession])
 
   const logout = useCallback(async () => {
     const savedToken = localStorage.getItem('auth_token')
@@ -67,15 +89,10 @@ export function AuthProvider({ children }) {
       // 로그아웃 API 실패해도 로컬 상태는 초기화
       console.error('로그아웃 API 오류:', error)
     } finally {
-      // 로그아웃 시 WebSocket 연결 해제
-      wsManager.disconnect()
-      localStorage.removeItem('auth_token')
-      setToken(null)
-      setUser(null)
-      setIsAuthenticated(false)
+      clearSession()
       navigate('/login')
     }
-  }, [navigate])
+  }, [clearSession, navigate])
 
   const value = {
     user,

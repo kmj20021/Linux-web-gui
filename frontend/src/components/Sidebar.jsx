@@ -70,14 +70,15 @@ function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="sidebar-nav">
-        {menuSections.map((section, idx) => (
-          <div key={idx}>
+      <nav className="sidebar-nav" aria-label="주요 메뉴">
+        {menuSections.map((section) => (
+          <div key={section.label}>
             <div className="nav-section-title">{section.label}</div>
             {section.items.map(item => (
               <Link
                 key={item.path}
                 to={item.path}
+                aria-current={location.pathname === item.path ? 'page' : undefined}
                 className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
               >
                 <span className="nav-icon">{item.icon}</span>

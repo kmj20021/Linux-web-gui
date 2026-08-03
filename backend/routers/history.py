@@ -11,13 +11,18 @@ from typing import List, Optional
 
 from core.database import get_db
 from core.models import MonitorSnapshot
+from core.security import get_current_user
 from schemas.history import (
     SnapshotItem,
     AggregatedSnapshot,
     HistoryResponse,
 )
 
-router = APIRouter(prefix="/monitor", tags=["모니터링 히스토리"])
+router = APIRouter(
+    prefix="/monitor",
+    tags=["모니터링 히스토리"],
+    dependencies=[Depends(get_current_user)],
+)
 
 # ============================================================
 # GET /monitor/history - 최근 히스토리 조회

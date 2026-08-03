@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import TerminalComponent from '../components/Terminal'
 import FileExplorer from '../components/FileExplorer'
 import { useAuth } from '../context/AuthContext'
-import { getAuthHeaders } from '../api/client'
+import { apiFetch } from '../api/client'
 import '../styles/Terminal.css'
 
 function TerminalPage() {
@@ -68,18 +68,10 @@ function TerminalPage() {
     if (!confirmed) return
 
     try {
-      const response = await fetch('/api/shell/reset', {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      })
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}))
-        window.alert(body.detail || `초기화 실패: ${response.status}`)
-        return
-      }
+      await apiFetch('/shell/reset', { method: 'DELETE' })
       handleReconnect()
     } catch (err) {
-      window.alert(`초기화 중 오류가 발생했습니다: ${err.message}`)
+      window.alert(err.message)
     }
   }, [handleReconnect])
 

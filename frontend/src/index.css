@@ -21,3 +21,16 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* 키보드 조작 시 현재 초점을 항상 보이게 한다.
+   마우스 클릭에는 나타나지 않으므로 기존 디자인을 해치지 않는다. */
+:focus-visible {
+  outline: 2px solid #2d6a4f;
+  outline-offset: 2px;
+}
+
+/* 표를 좁은 화면에서도 가로 스크롤로 읽을 수 있게 한다. */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

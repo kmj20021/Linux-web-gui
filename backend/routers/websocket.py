@@ -4,13 +4,12 @@ CPU·메모리·프로세스 1초 간격 브로드캐스트
 """
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
-from urllib.parse import parse_qs
-from jose import JWTError, jwt
 import psutil
 import asyncio
 import logging
 from typing import Optional
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from schemas.websocket import (
     CPUSnapshot,
@@ -18,7 +17,11 @@ from schemas.websocket import (
     ProcessSnapshot,
     MonitorMessage,
 )
-from core.security import SECRET_KEY, ALGORITHM
+from core.database import AsyncSessionLocal
+from core.models import WebUser
+from core.security import consume_ws_ticket
+from services.metrics_collector import get_collector
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -28,26 +31,43 @@ router = APIRouter(prefix="/ws", tags=["WebSocket"])
 # 인증 및 헬퍼 함수
 # ============================================================
 
-def verify_token(token: Optional[str]) -> bool:
-    """
-    JWT 토큰 검증 (WebSocket 전용, bool 반환)
-
-    - token이 None/빈 문자열이면 False
-    - core.security 의 SECRET_KEY/ALGORITHM 으로 디코딩
-    - payload.sub 가 존재해야 True
-    - JWTError(만료, 서명 불일치 등) 발생 시 False
-    """
-    if not token:
-        return False
+def _has_auth_query(websocket: WebSocket) -> bool:
+    """Reject credentials in URLs before the WebSocket handshake."""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload.get("sub") is not None
-    except JWTError:
+        query = websocket.scope.get("query_string", b"").decode("ascii")
+    except UnicodeDecodeError:
+        return True
+    keys = {part.split("=", 1)[0] for part in query.split("&") if part}
+    return bool({"token", "ticket"} & keys)
+
+
+async def _authenticate_monitor_ticket(websocket: WebSocket) -> bool:
+    try:
+        message = await asyncio.wait_for(websocket.receive_json(), timeout=5)
+    except (asyncio.TimeoutError, WebSocketDisconnect, ValueError, TypeError):
         return False
+    if not isinstance(message, dict) or message.get("type") != "authenticate":
+        return False
+    username = await consume_ws_ticket(message.get("ticket"), "monitor")
+    if username is None:
+        return False
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(WebUser).where(WebUser.username == username))
+        user = result.scalar_one_or_none()
+    return user is not None and user.is_active
 
 async def collect_metrics() -> MonitorMessage:
+    """현재 시스템 메트릭을 수집한다.
+
+    블로킹 psutil 호출(`cpu_percent(interval=...)` 등)은 이벤트 루프를 막지
+    않도록 executor 스레드에서 실행한다(PERF-01).
     """
-    현재 시스템 메트릭 수집
+    return await asyncio.to_thread(_collect_metrics_blocking)
+
+
+def _collect_metrics_blocking() -> MonitorMessage:
+    """
+    현재 시스템 메트릭 수집 (블로킹)
     CPU, 메모리, 상위 프로세스 5개
     """
     try:
@@ -56,14 +76,14 @@ async def collect_metrics() -> MonitorMessage:
         cpu_per_core = psutil.cpu_percent(interval=0.05, percpu=True)
         core_count = psutil.cpu_count(logical=False)
         load_avg = list(psutil.getloadavg())
-        
+
         cpu_snapshot = CPUSnapshot(
             total=cpu_total,
             per_core=cpu_per_core,
             core_count=core_count,
             load_avg=load_avg
         )
-        
+
         # 메모리 메트릭
         mem = psutil.virtual_memory()
         memory_snapshot = MemorySnapshot(
@@ -74,7 +94,7 @@ async def collect_metrics() -> MonitorMessage:
             cached_gb=round(mem.cached / (1024**3), 2),
             usage_pct=mem.percent
         )
-        
+
         # 프로세스 메트릭 (상위 5개, CPU 기준)
         processes = []
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
@@ -87,14 +107,14 @@ async def collect_metrics() -> MonitorMessage:
                 ))
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
-        
+
         processes.sort(key=lambda x: x.cpu_pct, reverse=True)
         # 상위 30개 프로세스 (프론트에서 정렬/필터링 가능하게)
         top_processes = processes[:30]
-        
+
         # 타임스탐프
         timestamp = datetime.now(timezone.utc).isoformat()
-        
+
         return MonitorMessage(
             type="monitor.snapshot",
             cpu=cpu_snapshot,
@@ -125,8 +145,7 @@ async def websocket_monitor(websocket: WebSocket):
     """
     WebSocket 실시간 모니터링 엔드포인트
 
-    사용 예:
-    - ws://localhost:8000/ws/monitor?token=<JWT from /api/auth/login>
+    연결 후 5초 내에 single-use monitor ticket을 인증한다.
 
     업데이트 주기: 5초 (개발자 확인 용이)
 
@@ -139,62 +158,105 @@ async def websocket_monitor(websocket: WebSocket):
         "timestamp": "2026-04-07T12:00:00+00:00"
     }
     """
-    # URL 쿼리 파라미터에서 토큰 추출
-    try:
-        query_string = websocket.scope.get("query_string", b"").decode()
-        query_params = parse_qs(query_string) if query_string else {}
-        token = query_params.get("token", [None])[0]
-        logger.info(f"🔍 WebSocket 연결 요청: token={token}, query_string={query_string}")
-    except Exception as e:
-        logger.error(f"❌ 쿼리 파라미터 파싱 실패: {e}")
-        await websocket.close(code=4001, reason="Invalid query parameters")
+    request_id = uuid4().hex
+
+    if _has_auth_query(websocket):
+        logger.warning(
+            "websocket request_id=%s result=%s",
+            request_id,
+            "authentication_failed",
+        )
+        await websocket.close(code=4001, reason="Unauthorized")
         return
-    
-    # 토큰 검증 (JWT)
-    if not verify_token(token):
-        logger.warning(f"⚠️ WebSocket 인증 실패 (invalid/expired JWT): token_present={bool(token)}")
-        await websocket.close(code=4001, reason="Unauthorized: Invalid or missing token")
-        return
-    
+
     await websocket.accept()
-    logger.info(f"✅ WebSocket 연결 수립 (token={token})")
-    
+    if not await _authenticate_monitor_ticket(websocket):
+        logger.warning(
+            "websocket request_id=%s result=%s",
+            request_id,
+            "authentication_failed",
+        )
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
+    logger.info(
+        "websocket request_id=%s result=%s",
+        request_id,
+        "accepted",
+    )
+
+    # 단일 백그라운드 수집기의 최신 snapshot을 공유받는다(PERF-01).
+    # 연결마다 수집하지 않으므로 연결 수가 늘어도 수집 횟수는 증가하지 않는다.
+    collector = get_collector()
+
     try:
         while True:
             # 연결 상태 확인
             if websocket.client_state == WebSocketState.DISCONNECTED:
-                logger.info(f"🔌 연결이 이미 종료됨 (token={token})")
+                logger.info(
+                    "websocket request_id=%s result=%s",
+                    request_id,
+                    "disconnected",
+                )
                 break
-            
-            # 5초 간격 메트릭 수집 및 브로드캐스트 (개발자 확인 용이)
+
+            # 다음 수집 주기(기본 5초)까지 대기했다가 공유 snapshot을 브로드캐스트한다.
             try:
-                await asyncio.sleep(5)
+                metrics = await collector.wait_for_update()
 
                 # 재차 연결 상태 확인
                 if websocket.client_state == WebSocketState.DISCONNECTED:
+                    logger.info(
+                        "websocket request_id=%s result=%s",
+                        request_id,
+                        "disconnected",
+                    )
                     break
 
-                metrics = await collect_metrics()
                 await websocket.send_json(metrics.model_dump())
-                logger.debug(f"📤 메트릭 브로드캐스트: {metrics.timestamp}")
-                
-            except RuntimeError as e:
+                logger.debug(
+                    "websocket request_id=%s result=%s",
+                    request_id,
+                    "metrics_sent",
+                )
+
+            except RuntimeError:
                 # RuntimeError: "Websocket is not connected" 또는 유사한 에러
-                logger.info(f"🔌 WebSocket 연결 종료 감지: {e}")
+                logger.info(
+                    "websocket request_id=%s result=%s",
+                    request_id,
+                    "send_failed",
+                )
                 break
-            except Exception as e:
-                logger.error(f"메트릭 전송 실패: {type(e).__name__}: {e}")
+            except Exception:
+                logger.error(
+                    "websocket request_id=%s result=%s",
+                    request_id,
+                    "send_failed",
+                )
                 # 연결이 끊긴 경우라면 루프 탈출
-                if "closed" in str(e).lower() or "disconnected" in str(e).lower():
+                if websocket.client_state == WebSocketState.DISCONNECTED:
                     break
-                
+
     except WebSocketDisconnect:
-        logger.info(f"🔌 WebSocket 연결 종료 (token={token})")
+        logger.info(
+            "websocket request_id=%s result=%s",
+            request_id,
+            "disconnected",
+        )
     except asyncio.CancelledError:
-        logger.info(f"🔌 WebSocket 태스크 취소됨 (token={token})")
-    except Exception as e:
-        logger.error(f"WebSocket 예외: {type(e).__name__}: {e}")
+        logger.info(
+            "websocket request_id=%s result=%s",
+            request_id,
+            "cancelled",
+        )
+    except Exception:
+        logger.error(
+            "websocket request_id=%s result=%s",
+            request_id,
+            "internal_error",
+        )
         try:
             await websocket.close(code=1011, reason="Internal error")
-        except:
+        except Exception:
             pass

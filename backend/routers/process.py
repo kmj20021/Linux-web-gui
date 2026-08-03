@@ -8,10 +8,18 @@ import psutil
 from typing import List
 
 from core.models import WebUser
-from core.security import get_current_user
+from core.security import get_current_admin, get_current_user
 from schemas.process import ProcessInfo
+from services import demo_procs
 
-router = APIRouter(prefix="/monitor", tags=["프로세스"])
+# 프로세스 목록은 호스트의 PID·실행 파일명·자원 사용률을 노출하므로
+# 다른 모니터링 라우터와 같이 로그인 사용자에게만 제공한다(BASE-02 권한 행렬).
+# 종료(kill)는 각 엔드포인트에서 admin 을 추가로 요구한다.
+router = APIRouter(
+    prefix="/monitor",
+    tags=["프로세스"],
+    dependencies=[Depends(get_current_user)],
+)
 
 # ============================================================
 # 프로세스 엔드포인트
@@ -61,13 +69,14 @@ async def get_top_processes():
 @router.post("/processes/{pid}/kill")
 async def kill_process(
     pid: int,
-    current_user: WebUser = Depends(get_current_user),
+    _current_admin: WebUser = Depends(get_current_admin),
 ):
     """
     지정한 PID의 프로세스 종료
 
+    - admin만 실행 가능
+    - 이 서버가 생성해 관리 중인 demo-* 자식 프로세스만 종료 가능
     - SIGTERM 으로 먼저 종료 시도, 3초 안에 종료되지 않으면 SIGKILL
-    - PID 1(init) 과 현재 서버 프로세스 자신은 종료 불가
     - 존재하지 않는 PID 는 404
     - 권한 부족(AccessDenied) 은 403
     """
@@ -94,7 +103,29 @@ async def kill_process(
             detail="프로세스를 종료할 권한이 없습니다",
         )
 
-    # 3. SIGTERM -> wait -> SIGKILL
+    # 3. 앱이 직접 생성해 관리하는 demo-* 자식인지 확인
+    managed_name = next(
+        (
+            name
+            for name, managed_proc in tuple(demo_procs._procs.items())
+            if name.startswith("demo-")
+            and managed_proc.pid == pid
+            and managed_proc.poll() is None
+        ),
+        None,
+    )
+    try:
+        is_child = proc.ppid() == current_pid
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        is_child = False
+
+    if managed_name is None or proc_name != managed_name or not is_child:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리 중인 데모 프로세스만 종료할 수 있습니다",
+        )
+
+    # 4. SIGTERM -> wait -> SIGKILL
     try:
         proc.terminate()
         try:

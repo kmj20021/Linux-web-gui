@@ -17,16 +17,19 @@ import shutil
 import struct
 import subprocess
 import termios
+import threading
 import time
 from pathlib import Path
 from typing import Dict, Optional
-from urllib.parse import parse_qs
 
-from fastapi import APIRouter, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
-from jose import JWTError, jwt
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from starlette.websockets import WebSocketState
 
-from core.security import ALGORITHM, SECRET_KEY
+from core.database import AsyncSessionLocal
+from core.models import WebUser
+from core.security import consume_ws_ticket, get_current_admin
+from services.file_tree import FileTreeError, build_lazy_tree
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +37,10 @@ WEBTERM_HOME = Path('/home/webterm')
 
 ACTIVE_SESSIONS: Dict[str, 'DockerSession'] = {}
 USER_LATEST_SESSION: Dict[str, str] = {}
+MAX_SHELL_SESSIONS_PER_USER = 1
+MAX_SHELL_SESSIONS_GLOBAL = 5
+START_EARLY_EXIT_CHECKS = 4
+START_EARLY_EXIT_INTERVAL_SECONDS = 0.05
 
 router = APIRouter(tags=["Shell"])
 
@@ -50,6 +57,19 @@ class DockerSession:
         # OSC 7 파싱 상태
         self._in_osc = False
         self._osc_buf = ''
+        self._cleaned = False
+        # PERF-02: cleanup 을 executor 스레드로 offload 하므로 단 한 번만
+        # 실행되도록 check-and-set 을 스레드 안전하게 보호한다.
+        self._cleanup_lock = threading.Lock()
+
+    def _remove_named_orphan(self) -> None:
+        """Remove only this session's deterministic container name."""
+        subprocess.run(
+            ['docker', 'rm', '-f', self.container_name],
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
 
     def start(self, cols: int = 80, rows: int = 24) -> int:
         self.home_dir.mkdir(parents=True, exist_ok=True)
@@ -61,6 +81,9 @@ class DockerSession:
         size = struct.pack('HHHH', rows, cols, 0, 0)
         fcntl.ioctl(master_fd, termios.TIOCSWINSZ, size)
 
+        # A previous daemon restart may leave this deterministic name behind.
+        self._remove_named_orphan()
+
         cmd = [
             'docker', 'run', '--rm', '-i', '--tty',
             '--name', self.container_name,
@@ -68,7 +91,13 @@ class DockerSession:
             '-m', '256m',
             '--cpus', '0.5',
             '--pids-limit', '100',
-            '--network', 'bridge',
+            '--network', 'none',
+            '--read-only',
+            '--cap-drop', 'ALL',
+            '--security-opt', 'no-new-privileges',
+            '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
+            '--tmpfs', '/run:rw,noexec,nosuid,size=16m',
+            '--user', '1000:1000',
             '-e', 'HOME=/home/user',
             '-e', 'USER=user',
             '-e', r'PS1=\u@\h:\w\$ ',
@@ -87,6 +116,12 @@ class DockerSession:
             preexec_fn=os.setsid,
         )
         os.close(slave_fd)
+
+        for _ in range(START_EARLY_EXIT_CHECKS):
+            if self.proc.poll() is not None:
+                self.cleanup()
+                raise RuntimeError('webterm container exited during startup')
+            time.sleep(START_EARLY_EXIT_INTERVAL_SECONDS)
         return master_fd
 
     def resize(self, cols: int, rows: int) -> None:
@@ -128,7 +163,25 @@ class DockerSession:
             i += 1
         return ''.join(result), new_cwd
 
+    async def start_async(self, cols: int = 80, rows: int = 24) -> int:
+        """PERF-02: 블로킹 컨테이너 시작(docker rm/run·sleep)을 executor로 옮긴다."""
+        return await asyncio.to_thread(self.start, cols, rows)
+
+    async def cleanup_async(self) -> None:
+        """PERF-02: 블로킹 정리(proc wait·docker rm)를 executor로 옮긴다.
+
+        정리는 멱등하며(``_cleaned`` 가드) 실행은 정확히 한 번만 일어난다.
+        """
+        await asyncio.to_thread(self.cleanup)
+
     def cleanup(self) -> None:
+        # check-and-set 을 스레드 안전하게: 두 스레드가 동시에 진입해도 본문은
+        # 한 번만 실행된다.
+        with self._cleanup_lock:
+            if self._cleaned:
+                return
+            self._cleaned = True
+
         if self.master_fd is not None:
             try:
                 os.close(self.master_fd)
@@ -137,73 +190,68 @@ class DockerSession:
             self.master_fd = None
 
         if self.proc is not None:
-            try:
-                self.proc.terminate()
-                self.proc.wait(timeout=2)
-            except Exception:
+            if self.proc.poll() is None:
                 try:
+                    self.proc.terminate()
+                    self.proc.wait(timeout=2)
+                except subprocess.TimeoutExpired:
                     self.proc.kill()
-                except Exception:
-                    pass
+                    self.proc.wait(timeout=2)
             self.proc = None
 
         try:
-            subprocess.run(
-                ['docker', 'rm', '-f', self.container_name],
-                capture_output=True, timeout=5,
-            )
+            self._remove_named_orphan()
         except Exception:
             pass
 
 
-def _decode_token(token: Optional[str]) -> Optional[dict]:
-    if not token:
-        return None
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload if payload.get('sub') else None
-    except JWTError:
-        return None
+def _session_capacity_error(username: str) -> Optional[str]:
+    if sum(session.username == username for session in ACTIVE_SESSIONS.values()) >= MAX_SHELL_SESSIONS_PER_USER:
+        return 'Shell session limit reached for this user'
+    if len(ACTIVE_SESSIONS) >= MAX_SHELL_SESSIONS_GLOBAL:
+        return 'Shell service is at capacity'
+    return None
 
 
 def _create_session_id(username: str) -> str:
     return f"{username}-{int(time.time() * 1000)}"
 
 
-def _extract_token_from_header(authorization: Optional[str]) -> Optional[str]:
-    if not authorization:
-        return None
-    parts = authorization.split()
-    return parts[1] if len(parts) == 2 and parts[0].lower() == 'bearer' else None
-
-
 @router.websocket('/ws/shell')
 async def websocket_shell(websocket: WebSocket):
-    # 토큰 추출 및 인증
     try:
-        query_string = websocket.scope.get('query_string', b'').decode()
-        params = parse_qs(query_string) if query_string else {}
-        token = params.get('token', [None])[0]
-    except Exception:
-        await websocket.close(code=4001, reason='Invalid query')
+        query = websocket.scope.get('query_string', b'').decode('ascii')
+    except UnicodeDecodeError:
+        await websocket.close(code=4001, reason='Unauthorized')
         return
-
-    payload = _decode_token(token)
-    if payload is None:
+    query_keys = {part.split('=', 1)[0] for part in query.split('&') if part}
+    if {'token', 'ticket'} & query_keys:
         await websocket.close(code=4001, reason='Unauthorized')
         return
 
-    # admin role 만 터미널 접근 허용
-    if payload.get('role') != 'admin':
-        await websocket.close(code=4003, reason='Admin privileges required')
+    await websocket.accept()
+    try:
+        authentication = await asyncio.wait_for(websocket.receive_json(), timeout=5)
+    except (asyncio.TimeoutError, WebSocketDisconnect, ValueError, TypeError):
+        await websocket.close(code=4001, reason='Unauthorized')
+        return
+    if not isinstance(authentication, dict) or authentication.get('type') != 'authenticate':
+        await websocket.close(code=4001, reason='Unauthorized')
+        return
+    username = await consume_ws_ticket(authentication.get('ticket'), 'shell')
+    if username is None:
+        await websocket.close(code=4001, reason='Unauthorized')
+        return
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(WebUser).where(WebUser.username == username))
+        user = result.scalar_one_or_none()
+    if user is None or not user.is_active or user.role != 'admin':
+        await websocket.close(code=4003, reason='Unauthorized')
         return
 
-    username = payload['sub']
     session_id = _create_session_id(username)
     session = DockerSession(session_id=session_id, username=username)
-
-    await websocket.accept()
-    logger.info(f'shell ws: session opening (user={username}, sid={session_id})')
+    logger.info('shell_ws result=%s', 'opened')
 
     # 초기 메타데이터 전송
     await websocket.send_json({
@@ -213,20 +261,28 @@ async def websocket_shell(websocket: WebSocket):
         'user': 'user',
     })
 
+    capacity_error = _session_capacity_error(username)
+    if capacity_error is not None:
+        logger.info('shell_ws result=%s', 'capacity_rejected')
+        await websocket.send_json({'type': 'data', 'data': f'\r\n{capacity_error}.\r\n'})
+        await websocket.close(code=1013, reason='Shell capacity reached')
+        return
+
     try:
-        master_fd = session.start(cols=80, rows=24)
-    except Exception as e:
-        logger.error(f'shell ws: container start failed: {e}')
+        master_fd = await session.start_async(80, 24)
+    except Exception:
+        logger.error('shell_ws result=%s', 'container_start_failed')
+        await session.cleanup_async()
         await websocket.send_json({
             'type': 'data',
-            'data': f'\r\n\x1b[31mError: 터미널을 시작하지 못했습니다: {e}\x1b[0m\r\n',
+            'data': '\r\n\x1b[31mError: terminal could not be started.\x1b[0m\r\n',
         })
         await websocket.close(code=1011, reason='Container start failed')
         return
 
     ACTIVE_SESSIONS[session_id] = session
     USER_LATEST_SESSION[username] = session_id
-    logger.info(f'shell ws: Docker container started (sid={session_id})')
+    logger.info('shell_ws result=%s', 'started')
 
     loop = asyncio.get_event_loop()
     read_queue: asyncio.Queue = asyncio.Queue()
@@ -294,8 +350,8 @@ async def websocket_shell(websocket: WebSocket):
                     break
             except WebSocketDisconnect:
                 break
-            except Exception as e:
-                logger.error(f'ws read error: {e}')
+            except Exception:
+                logger.error('shell_ws result=%s', 'read_failed')
                 break
 
     try:
@@ -310,10 +366,17 @@ async def websocket_shell(websocket: WebSocket):
                 await task
             except asyncio.CancelledError:
                 pass
-    except Exception as e:
-        logger.error(f'shell ws: unexpected error: {e}')
+    except Exception:
+        logger.error('shell_ws result=%s', 'unexpected_error')
     finally:
-        session.cleanup()
+        # PERF-02: 취소·timeout 로 offload 정리가 중단돼도 cleanup 은 멱등하므로
+        # 정확히 한 번만 실행된다. shield 로 정리 자체는 취소로부터 보호한다.
+        try:
+            await asyncio.shield(session.cleanup_async())
+        except asyncio.CancelledError:
+            session.cleanup()
+        except Exception:
+            session.cleanup()
         ACTIVE_SESSIONS.pop(session_id, None)
         if USER_LATEST_SESSION.get(username) == session_id:
             USER_LATEST_SESSION.pop(username, None)
@@ -321,23 +384,16 @@ async def websocket_shell(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
-        logger.info(f'shell ws: session closed (sid={session_id})')
+        logger.info('shell_ws result=%s', 'closed')
 
 
 @router.get('/api/shell/fs')
 async def get_shell_filesystem(
     session_id: Optional[str] = Query(None),
-    authorization: Optional[str] = Header(None),
+    path: str = Query('/home/user'),
+    current_admin: WebUser = Depends(get_current_admin),
 ):
-    token = _extract_token_from_header(authorization)
-    payload = _decode_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Invalid or missing token',
-            headers={'WWW-Authenticate': 'Bearer'},
-        )
-    username = payload['sub']
+    username = current_admin.username
 
     sid = session_id or USER_LATEST_SESSION.get(username)
     if not sid:
@@ -355,44 +411,27 @@ async def get_shell_filesystem(
     home_dir = WEBTERM_HOME / username
     home_dir.mkdir(parents=True, exist_ok=True)
 
+    try:
+        tree = build_lazy_tree(home_dir, path)
+    except FileTreeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
     return {
         'session_id': sid,
         'web_username': username,
         'current_user': 'user',
         'cwd': session.cwd,
-        'tree': _build_tree(home_dir, '/home/user'),
+        'tree': tree,
     }
-
-
-def _build_tree(host_path: Path, container_path: str) -> dict:
-    node = {
-        'name': Path(container_path).name or 'home',
-        'path': container_path,
-        'type': 'directory' if host_path.is_dir() else 'file',
-    }
-    if host_path.is_dir():
-        children = []
-        try:
-            for child in sorted(host_path.iterdir()):
-                child_container = container_path.rstrip('/') + '/' + child.name
-                children.append(_build_tree(child, child_container))
-        except PermissionError:
-            pass
-        node['children'] = children
-    return node
 
 
 @router.get('/api/shell/sessions')
-async def list_shell_sessions(authorization: Optional[str] = Header(None)):
-    token = _extract_token_from_header(authorization)
-    payload = _decode_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Invalid or missing token',
-            headers={'WWW-Authenticate': 'Bearer'},
-        )
-    username = payload['sub']
+async def list_shell_sessions(
+    current_admin: WebUser = Depends(get_current_admin),
+):
+    # 셸은 admin 전용이므로 세션 조회도 같은 기준을 쓴다. get_current_admin 은
+    # 서명만 보는 게 아니라 DB 에서 사용자 활성 상태와 현재 역할을 재확인한다.
+    username = current_admin.username
     sessions = [
         {'session_id': sid, 'cwd': s.cwd, 'user': 'user'}
         for sid, s in ACTIVE_SESSIONS.items()
@@ -402,16 +441,12 @@ async def list_shell_sessions(authorization: Optional[str] = Header(None)):
 
 
 @router.delete('/api/shell/reset')
-async def reset_shell_home(authorization: Optional[str] = Header(None)):
-    token = _extract_token_from_header(authorization)
-    payload = _decode_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail='Invalid or missing token',
-            headers={'WWW-Authenticate': 'Bearer'},
-        )
-    username = payload['sub']
+async def reset_shell_home(
+    current_admin: WebUser = Depends(get_current_admin),
+):
+    # 홈 초기화는 파일을 지우는 동작이므로 viewer 와 비활성 사용자를 서버에서 막는다
+    # (BASE-02 "셸 파일 탐색·초기화": 미인증 401, viewer 403, 본인 세션만 허용).
+    username = current_admin.username
 
     # 활성 세션이 있으면 정리 후 진행
     sids_to_remove = [
@@ -421,7 +456,8 @@ async def reset_shell_home(authorization: Optional[str] = Header(None)):
         session = ACTIVE_SESSIONS.get(sid)
         if session is not None:
             try:
-                session.cleanup()
+                # PERF-02: 블로킹 정리를 executor 로 옮겨 이벤트 루프를 막지 않는다.
+                await asyncio.to_thread(session.cleanup)
             except Exception as e:
                 logger.error(f'shell reset: cleanup failed (sid={sid}): {e}')
         ACTIVE_SESSIONS.pop(sid, None)

@@ -1,3 +1,21 @@
+> ## ⚠️ 과거 기록 — 현재 동작이 아닙니다
+>
+> 이 문서는 **2026-07-29 이전** 구현을 대상으로 손으로 실행한 결과이며, 현재
+> 자동 검사 결과가 아닙니다. 이후 `WS-01`·`SECRET-02`가 인증 방식을 바꿔서
+> 아래 내용 중 다음은 **더 이상 사실이 아닙니다.**
+>
+> | 이 문서의 서술 | 현재 구현 |
+> |---|---|
+> | `ws://.../ws/monitor?token=<JWT>` — URL 쿼리에 토큰 | **URL에 토큰을 넣지 않음.** 연결 후 첫 메시지로 60초 일회용 ticket 전달 |
+> | 인증 실패 시 `token=<값>`을 로그에 출력 | 토큰·ticket 원문을 로그에 남기지 않음 |
+> | 미인증 연결에 403 | ticket 미제출·만료·재사용 시 연결 종료 |
+> | 1초 간격 브로드캐스트 | **5초 주기**, 단일 수집기가 만든 스냅샷을 공유 |
+> | "모든 테스트 통과 ✅" | 현재 결과는 `python -m pytest backend/tests` 또는 `bash scripts/gate.sh` 실행 결과를 근거로 삼을 것 |
+>
+> 현재 WebSocket 계약은 `docs/contracts/security-contract.md` 3절과 `README.md`,
+> 자동 검증은 `backend/tests/test_websocket_authorization.py`를 보세요.
+> 이 문서는 변경 이력 참고용으로만 보존합니다.
+
 # WebSocket /ws/monitor 엔드포인트 테스트 결과 보고서
 
 ## 📋 실행 요약

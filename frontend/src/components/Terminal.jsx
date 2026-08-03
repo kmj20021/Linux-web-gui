@@ -2,6 +2,7 @@ import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import { authAPI } from '../api/client'
 
 const Terminal = forwardRef(function Terminal({ onSessionId, onCwdChange, onUserChange, onConnected }, ref) {
   const containerRef = useRef(null)
@@ -61,49 +62,70 @@ const Terminal = forwardRef(function Terminal({ onSessionId, onCwdChange, onUser
 
     const handleResize = () => {
       if (fitAddonRef.current) {
-        try { fitAddonRef.current.fit() } catch (e) {}
+        try { fitAddonRef.current.fit() } catch { /* Terminal may unmount during resize. */ }
       }
     }
     window.addEventListener('resize', handleResize)
 
-    const token = localStorage.getItem('auth_token')
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${wsProtocol}//${window.location.host}/ws/shell?token=${token}`
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/shell`
+    let disposed = false
 
     term.write('\x1b[33m터미널에 연결 중...\x1b[0m\r\n')
 
-    const ws = new WebSocket(wsUrl)
-    wsRef.current = ws
-
-    ws.onopen = () => {
-      if (onConnected) onConnected(true)
-      // 초기 터미널 크기 전송
-      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
-    }
-
-    ws.onmessage = (event) => {
+    const connectTerminal = async () => {
+      let ticketResponse
       try {
-        const msg = JSON.parse(event.data)
-        if (msg.type === 'data') {
-          term.write(msg.data)
-        } else if (msg.type === 'meta') {
-          if (msg.session_id && onSessionId) onSessionId(msg.session_id)
-          if (msg.cwd && onCwdChange) onCwdChange(msg.cwd)
-          if (msg.user && onUserChange) onUserChange(msg.user)
+        ticketResponse = await authAPI.getWebSocketTicket('shell')
+      } catch (error) {
+        if (!disposed) {
+          const message = error.status === 403
+            ? '터미널 접근 권한이 없습니다.'
+            : '터미널 인증에 실패했습니다. 다시 로그인해 주세요.'
+          term.write(`\r\n\x1b[31m${message}\x1b[0m\r\n`)
+          if (onConnected) onConnected(false)
         }
-      } catch (e) {
-        term.write(event.data)
+        return
+      }
+
+      if (disposed) return
+
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'authenticate', ticket: ticketResponse.ticket }))
+        if (onConnected) onConnected(true)
+        // 초기 터미널 크기 전송
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data)
+          if (msg.type === 'data') {
+            term.write(msg.data)
+          } else if (msg.type === 'meta') {
+            if (msg.session_id && onSessionId) onSessionId(msg.session_id)
+            if (msg.cwd && onCwdChange) onCwdChange(msg.cwd)
+            if (msg.user && onUserChange) onUserChange(msg.user)
+          }
+        } catch {
+          term.write(event.data)
+        }
+      }
+
+      ws.onerror = () => {
+        term.write('\r\n\x1b[31m웹소켓 연결 오류가 발생했습니다.\x1b[0m\r\n')
+      }
+
+      ws.onclose = (event) => {
+        term.write(`\r\n\x1b[33m연결이 종료되었습니다. (코드: ${event.code})\x1b[0m\r\n`)
+        if (onConnected) onConnected(false)
       }
     }
 
-    ws.onerror = () => {
-      term.write('\r\n\x1b[31m웹소켓 연결 오류가 발생했습니다.\x1b[0m\r\n')
-    }
-
-    ws.onclose = (event) => {
-      term.write(`\r\n\x1b[33m연결이 종료되었습니다. (코드: ${event.code})\x1b[0m\r\n`)
-      if (onConnected) onConnected(false)
-    }
+    connectTerminal()
 
     // 키보드 입력 → WebSocket (raw pass-through, bash가 처리)
     term.onData(data => {
@@ -120,6 +142,7 @@ const Terminal = forwardRef(function Terminal({ onSessionId, onCwdChange, onUser
     })
 
     return () => {
+      disposed = true
       window.removeEventListener('resize', handleResize)
       if (wsRef.current) {
         wsRef.current.close()

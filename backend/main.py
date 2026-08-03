@@ -8,6 +8,8 @@ import logging
 import asyncio
 import subprocess
 
+from core.security import validate_secret_key
+
 # 로그 설정 (모든 임포트 전에 정의)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,61 +50,14 @@ except ImportError as e:
 
 # 데이터베이스 및 스케줄러 임포트
 try:
-    from core.database import init_db, close_db, AsyncSessionLocal, engine
-    from core.models import WebUser
-    from core.security import get_password_hash
+    from core.database import close_db, engine
+    from core.db_migrations import run_migrations
     from services.scheduler import start_scheduler, stop_scheduler
-    from sqlalchemy import select, text
     db_import_success = True
 except ImportError as e:
     db_import_success = False
     logger.error(f"데이터베이스/스케줄러 임포트 실패: {e}")
 
-
-async def ensure_web_users_columns():
-    """
-    기존 SQLite DB 파일에 web_users.created_by 컬럼이 없을 경우 ALTER TABLE 로 추가한다.
-    SQLAlchemy 의 create_all() 은 이미 존재하는 테이블에 새 컬럼을 추가하지 않으므로,
-    스키마 변경 후 첫 기동 시 한 번 수동 마이그레이션이 필요하다.
-    이미 컬럼이 존재하면 예외가 발생하므로 try/except 로 안전하게 무시한다.
-    """
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(
-                text("ALTER TABLE web_users ADD COLUMN created_by VARCHAR(64)")
-            )
-        logger.info("✅ web_users.created_by 컬럼 추가 완료")
-    except Exception as e:
-        # 이미 컬럼이 있으면 'duplicate column name' 에러 → 정상 케이스
-        logger.info(f"ℹ️ web_users.created_by 컬럼 마이그레이션 스킵: {e}")
-
-
-async def ensure_default_admin():
-    """
-    WebUser 테이블에 admin 계정이 없으면 기본 admin 계정을 생성한다.
-    - username: admin
-    - password: admin1234 (bcrypt 해시 저장)
-    - role: admin
-    이미 존재하면 아무 작업도 하지 않는다.
-    """
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(WebUser).where(WebUser.username == "admin")
-        )
-        existing = result.scalar_one_or_none()
-        if existing is not None:
-            logger.info("ℹ️ admin 계정이 이미 존재하여 시드 생성을 건너뜁니다")
-            return
-
-        admin = WebUser(
-            username="admin",
-            hashed_password=get_password_hash("admin1234"),
-            role="admin",
-            is_active=True,
-        )
-        session.add(admin)
-        await session.commit()
-        logger.info("✅ 기본 admin 계정 생성 완료 (username=admin)")
 
 app = FastAPI(
     title="Linux Web GUI API",
@@ -154,6 +109,8 @@ async def health_check():
 @app.on_event("startup")
 async def startup_event():
     """서버 시작 시 이벤트"""
+    # Validate before Docker, database, scheduler, or process side effects.
+    validate_secret_key()
     logger.info("🚀 FastAPI 서버 시작")
 
     # Docker 이미지 확인
@@ -167,26 +124,21 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"⚠️ Docker 확인 실패: {e}")
 
-    # 데이터베이스 초기화 (테이블 생성)
+    # 데이터베이스 스키마 마이그레이션 (DB-01)
+    # 임의 ALTER TABLE 대신 버전 관리된 Alembic 마이그레이션을 head 까지 적용한다.
+    # 스키마 오류는 숨기지 않고 시작을 실패시킨다(fail-closed).
     if db_import_success:
-        try:
-            await init_db()
-            logger.info("✅ 데이터베이스 접속 및 테이블 생성 완료")
-        except Exception as e:
-            logger.error(f"❌ 데이터베이스 초기화 실패: {e}")
+        await asyncio.to_thread(run_migrations)
+        logger.info("✅ 데이터베이스 마이그레이션 완료 (alembic head)")
 
-        # 기존 DB 파일에 신규 컬럼이 없을 경우를 위한 마이그레이션
-        try:
-            await ensure_web_users_columns()
-        except Exception as e:
-            logger.error(f"❌ web_users 컬럼 마이그레이션 실패: {e}")
+    # 단일 메트릭 수집기 시작 (PERF-01: 공유 fan-out 소스)
+    try:
+        from services.metrics_collector import get_collector
+        await get_collector().start()
+        logger.info("✅ 메트릭 수집기 시작됨")
+    except Exception as e:
+        logger.error(f"❌ 메트릭 수집기 시작 실패: {e}")
 
-        # 기본 admin 계정 시드 (없을 때만 생성)
-        try:
-            await ensure_default_admin()
-        except Exception as e:
-            logger.error(f"❌ 기본 admin 계정 시드 실패: {e}")
-    
     # 스케줄러 시작 (1분 간격 스냅샷 저장)
     if db_import_success:
         try:
@@ -215,6 +167,14 @@ async def shutdown_event():
             logger.info("✅ 백그라운드 스케줄러 중지됨")
         except Exception as e:
             logger.error(f"❌ 스케줄러 중지 실패: {e}")
+
+    # 메트릭 수집기 중지 (PERF-01)
+    try:
+        from services.metrics_collector import get_collector
+        await get_collector().stop()
+        logger.info("✅ 메트릭 수집기 중지됨")
+    except Exception as e:
+        logger.error(f"❌ 메트릭 수집기 중지 실패: {e}")
     
     # 데이터베이스 연결 해제
     if db_import_success:
