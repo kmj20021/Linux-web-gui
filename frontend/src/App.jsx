@@ -13,6 +13,7 @@ import Network from './pages/Network'
 import Audit from './pages/Audit'
 import Terminal from './pages/Terminal'
 import NetworkDiagnostics from './pages/NetworkDiagnostics'
+import AITutor from './pages/AITutor'
 import { monitoringAPI } from './api/client'
 import './App.css'
 
@@ -147,6 +148,16 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <NetworkDiagnostics />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ai-tutor"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AITutor />
                 </Layout>
               </ProtectedRoute>
             }

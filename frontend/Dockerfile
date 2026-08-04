@@ -14,6 +14,9 @@ RUN npm run build
 FROM nginx:1.24-alpine
 WORKDIR /usr/share/nginx/html
 
+# IP DOMAIN_NAME용 자체 서명 인증서 생성에 필요
+RUN apk add --no-cache openssl
+
 # 빌드된 dist 파일을 Nginx 서빙 경로로 복사
 COPY --from=builder /app/dist .
 

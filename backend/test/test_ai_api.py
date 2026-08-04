@@ -238,7 +238,8 @@ async def main() -> None:
             valid_token = create_access_token({"sub": owner.username, "role": owner.role})
             assert (await get_current_user(valid_token, db)).id == owner.id
             inactive_token = create_access_token({"sub": inactive.username, "role": inactive.role})
-            await expect_http(403, get_current_user(inactive_token, db))
+            # core/security.py 계약 §1: 비활성 사용자는 403이 아니라 401(세션 정리 트리거)이다.
+            await expect_http(401, get_current_user(inactive_token, db))
             await expect_http(401, get_current_user("invalid-token", db))
 
             try:

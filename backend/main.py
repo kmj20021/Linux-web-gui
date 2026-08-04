@@ -48,6 +48,16 @@ except ImportError as e:
     import traceback
     traceback.print_exc()
 
+# ai_tutor 라우터는 독립적으로 임포트 (실패해도 다른 라우터에 영향 없도록 분리)
+try:
+    from routers.ai_tutor import router as ai_tutor_router
+    from routers.ai_tutor import curriculum_router as ai_curriculum_router
+    ai_tutor_import_success = True
+except ImportError as e:
+    ai_tutor_import_success = False
+    import traceback
+    traceback.print_exc()
+
 # 데이터베이스 및 스케줄러 임포트
 try:
     from core.database import close_db, engine
@@ -100,6 +110,14 @@ if shell_import_success:
     logger.info("✅ shell 라우터 등록됨 (WebSocket /ws/shell + REST /api/shell/*)")
 else:
     logger.warning("⚠️ shell 라우터 등록 실패")
+
+# ai_tutor 라우터 등록 (/api prefix)
+if ai_tutor_import_success:
+    app.include_router(ai_tutor_router, prefix="/api")
+    app.include_router(ai_curriculum_router, prefix="/api")
+    logger.info("✅ ai_tutor 라우터 등록됨")
+else:
+    logger.warning("⚠️ ai_tutor 라우터 등록 실패")
 
 @app.get("/api/health", tags=["Health"])
 async def health_check():

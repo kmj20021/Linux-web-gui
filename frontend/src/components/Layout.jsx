@@ -49,6 +49,7 @@ function getPageTitle(pathname) {
     '/network-diagnostics': '네트워크 진단',
     '/audit': '로그인 이력',
     '/terminal': '터미널',
+    '/ai-tutor': 'AI 리눅스 학습',
   }
   return titles[pathname] || 'Linux Web GUI'
 }

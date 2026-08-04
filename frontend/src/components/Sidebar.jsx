@@ -19,6 +19,12 @@ function Sidebar() {
       ]
     },
     {
+      label: '학습',
+      items: [
+        { path: '/ai-tutor', label: 'AI 리눅스 학습', icon: aiTutorIcon() },
+      ]
+    },
+    {
       label: '시스템',
       items: [
         { path: '/filesystem', label: '파일시스템', icon: filesystemIcon() },
@@ -182,6 +188,17 @@ function terminalIcon() {
       <rect x="1" y="2" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
       <path d="M3.5 5L5.5 7L3.5 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
       <path d="M7 9h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
+function aiTutorIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <rect x="2" y="2" width="10" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+      <circle cx="5" cy="6" r="0.9" fill="currentColor"/>
+      <circle cx="9" cy="6" r="0.9" fill="currentColor"/>
+      <path d="M5 12h4M7 10v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   )
 }

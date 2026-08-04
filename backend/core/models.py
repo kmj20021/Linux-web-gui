@@ -2,7 +2,8 @@
 SQLAlchemy ORM 모델
 모니터링 스냅샷 데이터 저장
 """
-from sqlalchemy import Column, Integer, Float, String, DateTime, JSON, Boolean
+from sqlalchemy import Column, Integer, Float, String, Text, DateTime, JSON, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from core.database import Base
 from datetime import datetime, timezone
@@ -107,6 +108,10 @@ class WebUser(Base):
     )
     created_by = Column(String(64), nullable=True)
 
+    ai_learning_sessions = relationship(
+        "AILearningSession", back_populates="user", cascade="all, delete-orphan"
+    )
+
     def __repr__(self):
         return f"<WebUser(id={self.id}, username={self.username}, role={self.role})>"
 
@@ -157,3 +162,125 @@ class LoginLog(Base):
             "ip_address": self.ip_address,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class AILearningSession(Base):
+    """
+    AI 리눅스 학습 세션 (docs/ai-plan.md)
+
+    - user_id: 세션 소유자 (WebUser)
+    - mode: "docker" | "simulation" (MVP는 simulation만 실제 실행 지원)
+    - level: "beginner" | "intermediate" | "advanced"
+    - scenario_key / task_key: 커리큘럼 fixture의 시나리오·문제 식별자
+    - status: "in_progress" | "completed"
+    """
+
+    __tablename__ = "ai_learning_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("web_users.id"), nullable=False, index=True)
+    mode = Column(String(16), nullable=False)
+    level = Column(String(16), nullable=False)
+    scenario_key = Column(String(64), nullable=False)
+    task_key = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False, default="in_progress")
+    started_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("WebUser", back_populates="ai_learning_sessions")
+    virtual_state = relationship(
+        "AIVirtualState", back_populates="session", uselist=False,
+        cascade="all, delete-orphan",
+    )
+    command_attempts = relationship(
+        "AICommandAttempt", back_populates="session",
+        cascade="all, delete-orphan", order_by="AICommandAttempt.id",
+    )
+    chat_messages = relationship(
+        "AIChatMessage", back_populates="session",
+        cascade="all, delete-orphan", order_by="AIChatMessage.id",
+    )
+
+    def __repr__(self):
+        return f"<AILearningSession(id={self.id}, user_id={self.user_id}, status={self.status})>"
+
+
+class AIVirtualState(Base):
+    """세션당 정확히 하나, 가상 리눅스 상태(JSON)와 낙관적 잠금용 version."""
+
+    __tablename__ = "ai_virtual_states"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(
+        Integer, ForeignKey("ai_learning_sessions.id"), nullable=False, unique=True, index=True
+    )
+    state_json = Column(JSON, nullable=False)
+    version = Column(Integer, nullable=False, default=1)
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    session = relationship("AILearningSession", back_populates="virtual_state")
+
+    def __repr__(self):
+        return f"<AIVirtualState(id={self.id}, session_id={self.session_id}, version={self.version})>"
+
+
+class AICommandAttempt(Base):
+    """학습자가 입력한 명령과 시뮬레이터 실행 결과(before/after 가상 상태)."""
+
+    __tablename__ = "ai_command_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("ai_learning_sessions.id"), nullable=False, index=True)
+    mode = Column(String(16), nullable=False)
+    command_text = Column(String(2048), nullable=False)
+    result_code = Column(String(32), nullable=False)
+    output_text = Column(Text, nullable=False)
+    state_before = Column(JSON, nullable=False)
+    state_after = Column(JSON, nullable=False)
+    is_task_success = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    session = relationship("AILearningSession", back_populates="command_attempts")
+    chat_messages = relationship("AIChatMessage", back_populates="attempt")
+
+    def __repr__(self):
+        return f"<AICommandAttempt(id={self.id}, session_id={self.session_id}, result_code={self.result_code})>"
+
+
+class AIChatMessage(Base):
+    """세션의 대화 기록: 사용자 메시지, Bedrock 응답, 규칙 기반 힌트."""
+
+    __tablename__ = "ai_chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("ai_learning_sessions.id"), nullable=False, index=True)
+    role = Column(String(16), nullable=False)  # "user" | "assistant" | "hint"
+    content = Column(Text, nullable=False)
+    attempt_id = Column(Integer, ForeignKey("ai_command_attempts.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    session = relationship("AILearningSession", back_populates="chat_messages")
+    attempt = relationship("AICommandAttempt", back_populates="chat_messages")
+
+    def __repr__(self):
+        return f"<AIChatMessage(id={self.id}, session_id={self.session_id}, role={self.role})>"
+
+
+class AIInteractionAudit(Base):
+    """힌트 요청·채점 등 학습 상호작용 감사 로그 (진행률 계산과 이력 조회에 사용)."""
+
+    __tablename__ = "ai_interaction_audits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("ai_learning_sessions.id"), nullable=False, index=True)
+    action = Column(String(16), nullable=False)  # "hint" | "grade"
+    scenario_key = Column(String(64), nullable=False)
+    task_key = Column(String(64), nullable=False)
+    result_code = Column(String(32), nullable=False)
+    details_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<AIInteractionAudit(id={self.id}, session_id={self.session_id}, action={self.action})>"
