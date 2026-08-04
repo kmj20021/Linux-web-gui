@@ -4,17 +4,21 @@ import '../styles/AITutor.css'
 
 // AI 리눅스 학습 페이지.
 // 명령은 실제로 실행되지 않고 backend/services/virtual_linux.py 의 결정적
-// 시뮬레이터가 처리한다. Bedrock 은 결과를 설명만 하며 채점 권한이 없다.
+// 시뮬레이터가 처리한다. Bedrock 은 명령 실행 결과에는 관여하지 않고,
+// 오직 "AI 도우미" 패널의 질문/힌트 응답에만 쓰인다 — 터미널과 채팅은
+// 서로 다른 영역이라 섞이지 않는다.
 function AITutor() {
   const [curriculum, setCurriculum] = useState([])
   const [curriculumError, setCurriculumError] = useState(null)
   const [session, setSession] = useState(null)
-  const [log, setLog] = useState([])
+  const [commandLog, setCommandLog] = useState([])
+  const [chatLog, setChatLog] = useState([])
   const [commandText, setCommandText] = useState('')
   const [chatText, setChatText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const logRef = useRef(null)
+  const commandLogRef = useRef(null)
+  const chatLogRef = useRef(null)
 
   useEffect(() => {
     aiTutorAPI.curriculum()
@@ -23,10 +27,12 @@ function AITutor() {
   }, [])
 
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [log])
+    if (commandLogRef.current) commandLogRef.current.scrollTop = commandLogRef.current.scrollHeight
+  }, [commandLog])
 
-  const appendLog = (entries) => setLog(prev => [...prev, ...entries])
+  useEffect(() => {
+    if (chatLogRef.current) chatLogRef.current.scrollTop = chatLogRef.current.scrollHeight
+  }, [chatLog])
 
   const describeError = (err) => {
     if (err instanceof AITutorAPIError) {
@@ -65,7 +71,8 @@ function AITutor() {
   const startProblem = (problem) => runGuarded(async () => {
     const created = await aiTutorAPI.createSession(problem)
     setSession(created)
-    setLog([{ type: 'system', text: `[${created.current_problem.title}] 학습을 시작합니다.` }])
+    setCommandLog([{ type: 'system', text: `[${created.current_problem.title}] 학습을 시작합니다.` }])
+    setChatLog([])
   })
 
   const submitCommand = () => {
@@ -74,10 +81,9 @@ function AITutor() {
     runGuarded(async () => {
       const result = await aiTutorAPI.command(session.id, text, session.virtual_state.version)
       setCommandText('')
-      appendLog([
+      setCommandLog(prev => [...prev,
         { type: 'command', text },
         { type: 'output', text: result.output },
-        { type: 'assistant', text: result.bedrock.message, degraded: result.bedrock.degraded },
       ])
       setSession(prev => ({ ...prev, virtual_state: { ...prev.virtual_state, version: result.version } }))
     })
@@ -89,7 +95,7 @@ function AITutor() {
     runGuarded(async () => {
       const result = await aiTutorAPI.chat(session.id, text)
       setChatText('')
-      appendLog([
+      setChatLog(prev => [...prev,
         { type: 'user', text },
         { type: 'assistant', text: result.bedrock.message, degraded: result.bedrock.degraded },
       ])
@@ -101,7 +107,7 @@ function AITutor() {
     if (!session) return
     runGuarded(async () => {
       const result = await aiTutorAPI.hint(session.id, session.virtual_state.version)
-      appendLog([
+      setChatLog(prev => [...prev,
         { type: 'hint', text: `힌트 ${result.hint_level}: ${result.hint}` },
         { type: 'assistant', text: result.bedrock.message, degraded: result.bedrock.degraded },
       ])
@@ -114,12 +120,12 @@ function AITutor() {
     runGuarded(async () => {
       const result = await aiTutorAPI.grade(session.id, session.virtual_state.version)
       const gradeLabel = { success: '성공', partial: '부분 성공', failure: '실패' }[result.grade]
-      appendLog([{ type: 'grade', text: `채점: ${gradeLabel} - ${result.description}` }])
+      setCommandLog(prev => [...prev, { type: 'grade', text: `채점: ${gradeLabel} - ${result.description}` }])
       const refreshed = await refreshSession(session.id)
       if (result.progress.completed) {
-        appendLog([{ type: 'system', text: '커리큘럼을 모두 완료했습니다.' }])
+        setCommandLog(prev => [...prev, { type: 'system', text: '커리큘럼을 모두 완료했습니다.' }])
       } else if (result.grade === 'success') {
-        appendLog([{ type: 'system', text: `다음 문제: ${refreshed.current_problem.title}` }])
+        setCommandLog(prev => [...prev, { type: 'system', text: `다음 문제: ${refreshed.current_problem.title}` }])
       }
     })
   }
@@ -129,15 +135,16 @@ function AITutor() {
     runGuarded(async () => {
       const result = await aiTutorAPI.reset(session.id, session.virtual_state.version)
       setSession(result)
-      appendLog([{ type: 'system', text: '가상 상태를 초기화했습니다.' }])
+      setCommandLog(prev => [...prev, { type: 'system', text: '가상 상태를 초기화했습니다.' }])
     })
   }
 
   return (
     <div className="ai-page">
       <div className="ai-simulation-notice">
-        교육용 시뮬레이션입니다. 명령은 실제로 실행되지 않으며, AI 설명은 참고용이고
-        채점은 항상 서버의 규칙 기반 로직이 결정합니다.
+        교육용 시뮬레이션입니다. 명령은 실제로 실행되지 않으며, 채점은 항상 서버의 규칙
+        기반 로직이 결정합니다. AI는 명령 결과에 대해 자동으로 코멘트하지 않고,
+        오른쪽 "AI 도우미"에서 직접 물어볼 때만 답합니다.
       </div>
 
       <div className="ai-main">
@@ -161,62 +168,74 @@ function AITutor() {
           </ul>
         </aside>
 
-        <section className="ai-workspace">
-          {!session ? (
-            <div className="ai-empty">왼쪽에서 문제를 선택해 학습을 시작하세요.</div>
-          ) : (
-            <>
-              <div className="ai-problem-card">
-                <h3>{session.current_problem.title}</h3>
-                <p>{session.current_problem.description}</p>
-                <div className="ai-problem-meta">
-                  <span>학습 목표: {session.current_problem.learning_goal}</span>
-                  <span>버전: {session.virtual_state.version}</span>
-                  <span>상태: {session.status === 'completed' ? '완료' : '진행 중'}</span>
-                </div>
-                <div className="ai-actions">
-                  <button onClick={requestHint} disabled={busy || session.status === 'completed'}>힌트</button>
-                  <button onClick={requestGrade} disabled={busy || session.status === 'completed'}>채점</button>
-                  <button onClick={resetProblem} disabled={busy}>초기화</button>
-                </div>
+        {!session ? (
+          <div className="ai-empty">왼쪽에서 문제를 선택해 학습을 시작하세요.</div>
+        ) : (
+          <div className="ai-workspace">
+            <div className="ai-problem-card">
+              <h3>{session.current_problem.title}</h3>
+              <p>{session.current_problem.description}</p>
+              <div className="ai-problem-meta">
+                <span>학습 목표: {session.current_problem.learning_goal}</span>
+                <span>버전: {session.virtual_state.version}</span>
+                <span>상태: {session.status === 'completed' ? '완료' : '진행 중'}</span>
               </div>
-
-              {error && <div className="ai-error">{error}</div>}
-
-              <div className="ai-log" ref={logRef}>
-                {log.map((entry, index) => (
-                  <div key={index} className={`ai-log-entry ai-log-${entry.type}`}>
-                    {entry.type === 'command' && <span className="ai-prompt">$ </span>}
-                    {entry.text}
-                    {entry.degraded && <span className="ai-degraded-badge">규칙 기반</span>}
-                  </div>
-                ))}
+              <div className="ai-actions">
+                <button onClick={requestHint} disabled={busy || session.status === 'completed'}>힌트</button>
+                <button onClick={requestGrade} disabled={busy || session.status === 'completed'}>채점</button>
+                <button onClick={resetProblem} disabled={busy}>초기화</button>
               </div>
+            </div>
 
-              <form className="ai-input-row" onSubmit={(e) => { e.preventDefault(); submitCommand() }}>
-                <input
-                  type="text"
-                  placeholder="명령 입력 (예: systemctl status nginx)"
-                  value={commandText}
-                  onChange={(e) => setCommandText(e.target.value)}
-                  disabled={busy || session.status === 'completed'}
-                />
-                <button type="submit" disabled={busy || !commandText.trim() || session.status === 'completed'}>실행</button>
-              </form>
+            {error && <div className="ai-error">{error}</div>}
 
-              <form className="ai-input-row" onSubmit={(e) => { e.preventDefault(); submitChat() }}>
-                <input
-                  type="text"
-                  placeholder="AI에게 질문하기"
-                  value={chatText}
-                  onChange={(e) => setChatText(e.target.value)}
-                  disabled={busy || session.status === 'completed'}
-                />
-                <button type="submit" disabled={busy || !chatText.trim() || session.status === 'completed'}>질문</button>
-              </form>
-            </>
-          )}
-        </section>
+            <div className="ai-panels">
+              <section className="ai-panel">
+                <h4 className="ai-panel-title">터미널</h4>
+                <div className="ai-log ai-log-terminal" ref={commandLogRef}>
+                  {commandLog.map((entry, index) => (
+                    <div key={index} className={`ai-log-entry ai-log-${entry.type}`}>
+                      {entry.type === 'command' && <span className="ai-prompt">$ </span>}
+                      {entry.text}
+                    </div>
+                  ))}
+                </div>
+                <form className="ai-input-row" onSubmit={(e) => { e.preventDefault(); submitCommand() }}>
+                  <input
+                    type="text"
+                    placeholder="명령 입력 (예: systemctl status nginx)"
+                    value={commandText}
+                    onChange={(e) => setCommandText(e.target.value)}
+                    disabled={busy || session.status === 'completed'}
+                  />
+                  <button type="submit" disabled={busy || !commandText.trim() || session.status === 'completed'}>실행</button>
+                </form>
+              </section>
+
+              <section className="ai-panel">
+                <h4 className="ai-panel-title">AI 도우미</h4>
+                <div className="ai-log ai-log-chat" ref={chatLogRef}>
+                  {chatLog.map((entry, index) => (
+                    <div key={index} className={`ai-log-entry ai-log-${entry.type}`}>
+                      {entry.text}
+                      {entry.degraded && <span className="ai-degraded-badge">규칙 기반</span>}
+                    </div>
+                  ))}
+                </div>
+                <form className="ai-input-row" onSubmit={(e) => { e.preventDefault(); submitChat() }}>
+                  <input
+                    type="text"
+                    placeholder="AI에게 질문하기"
+                    value={chatText}
+                    onChange={(e) => setChatText(e.target.value)}
+                    disabled={busy || session.status === 'completed'}
+                  />
+                  <button type="submit" disabled={busy || !chatText.trim() || session.status === 'completed'}>질문</button>
+                </form>
+              </section>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

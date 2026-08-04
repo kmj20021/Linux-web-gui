@@ -68,18 +68,6 @@ async def _call_bedrock(user_id: int, *, reject: bool = True, **kwargs) -> dict:
         await bedrock_rate_limiter.release(user_id)
 
 
-async def _run_acquired_bedrock(user_id: int, **kwargs) -> dict:
-    try:
-        try:
-            return _bedrock_dict(await run_in_threadpool(lambda: bedrock_service.tutor(**kwargs)))
-        except Exception:
-            # The authoritative simulation commit must survive even an unexpected
-            # adapter failure. Never expose or persist the raw exception text.
-            return _adapter_fallback()
-    finally:
-        await bedrock_rate_limiter.release(user_id)
-
-
 def _progress(grade: str, attempts: int, hint_level: int, following=None,
               completed: bool = False) -> ProgressInfo:
     return ProgressInfo(grade=grade, attempts=attempts, hint_level=hint_level,
@@ -288,10 +276,9 @@ async def execute_learning_command(session_id: int, request: CommandRequest,
     if session.status == "completed":
         raise HTTPException(409, "Curriculum is completed")
     await _version_or_409(session, request.expected_version)
-    acquired, retry_after = await bedrock_rate_limiter.acquire(current_user.id)
-    if not acquired:
-        raise HTTPException(429, "Bedrock request is busy or cooling down",
-                            headers={"Retry-After": str(retry_after)})
+    # Command execution is silent by design: the deterministic simulator
+    # decides the output, and Bedrock never comments on it here. AI advice
+    # is only available through the separate /chat and /hints endpoints.
     execution = execute_command(session.virtual_state.state_json, request.command_text)
     attempt = AICommandAttempt(session_id=session.id, mode="simulation",
         command_text=request.command_text, result_code=execution.result_code,
@@ -306,31 +293,20 @@ async def execute_learning_command(session_id: int, request: CommandRequest,
             updated_at=datetime.now(timezone.utc)))
         if changed.rowcount != 1:
             await db.rollback()
-            await bedrock_rate_limiter.release(current_user.id)
             raise HTTPException(409, "Virtual state version conflict")
-    try:
-        await db.commit()
-    except Exception:
-        await bedrock_rate_limiter.release(current_user.id)
-        raise
+    await db.commit()
     await db.refresh(attempt)
     await db.refresh(session.virtual_state)
     problem = get_problem(session.scenario_key, session.task_key)
     grade = grade_problem(problem, session.virtual_state.state_json).grade
-    bedrock = await _run_acquired_bedrock(current_user.id, learner_level=session.level,
-        problem=problem, state_summary=session.virtual_state.state_json, grade=grade,
-        last_command=request.command_text)
-    assistant = AIChatMessage(session_id=session.id, role="assistant",
-        content=bedrock["message"], attempt_id=attempt.id)
-    db.add(assistant); await db.commit(); await db.refresh(assistant)
     attempts, hint_level = await _task_stats(db, session)
     following = next_problem(session.scenario_key, session.task_key, grade=grade) if grade == "success" else None
     return CommandResponse(session_id=session.id, scenario_id=session.scenario_key,
         task_id=session.task_key, version=session.virtual_state.version,
-        attempt_id=attempt.id, assistant_message_id=assistant.id, result_code=execution.result_code,
+        attempt_id=attempt.id, result_code=execution.result_code,
         output=execution.output, state_before=execution.state_before,
         state_after=execution.state_after,
-        progress=_progress(grade, attempts, hint_level, following), bedrock=bedrock)
+        progress=_progress(grade, attempts, hint_level, following))
 
 
 @router.post("/{session_id}/chat", response_model=ChatResponse)

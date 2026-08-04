@@ -141,6 +141,10 @@ async def main() -> None:
             await expect_http(409, execute_learning_command(created.id,
                 CommandRequest(command_text="systemctl status nginx", expected_version=1), db, owner))
 
+            # Command execution no longer touches Bedrock, so the cooldown must
+            # be armed directly to exercise chat()'s own rate limiting.
+            assert (await bedrock_rate_limiter.acquire(owner.id))[0]
+            await bedrock_rate_limiter.release(owner.id)
             bedrock_rate_limiter.cooldown_seconds = 2
             await expect_http(429, chat(created.id, ChatRequest(message="왜 그런가요?"), Response(), db, owner))
             await bedrock_rate_limiter.reset(); bedrock_rate_limiter.cooldown_seconds = 0
@@ -188,17 +192,17 @@ async def main() -> None:
             await expect_http(409, execute_learning_command(docker_session.id,
                 CommandRequest(command_text="systemctl start nginx", expected_version=1), db, owner))
 
-            failure_session = await create_session(payload, db, owner)
             class ExplodingBedrock:
                 def tutor(self, **kwargs):
                     raise RuntimeError("raw-secret-error")
             ai_router.bedrock_service = ExplodingBedrock()
             await bedrock_rate_limiter.reset()
-            failure_result = await execute_learning_command(failure_session.id,
+            failure_session = await create_session(payload, db, owner)
+            # Command execution never calls Bedrock, so it must keep working
+            # even when the adapter is completely broken.
+            command_result = await execute_learning_command(failure_session.id,
                 CommandRequest(command_text="systemctl start nginx", expected_version=1), db, owner)
-            assert failure_result.version == 2 and failure_result.bedrock.degraded
-            assert failure_result.bedrock.reason == "bedrock_adapter_error"
-            assert "raw-secret-error" not in failure_result.model_dump_json()
+            assert command_result.version == 2 and command_result.result_code == "success"
             assert (await get_session(failure_session.id, db, owner)).virtual_state.version == 2
             degraded_hint_session = await create_session(payload, db, owner)
             await bedrock_rate_limiter.reset()

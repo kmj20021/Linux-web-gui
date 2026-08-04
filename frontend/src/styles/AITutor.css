@@ -181,8 +181,33 @@
   flex-shrink: 0;
 }
 
+.ai-panels {
+  flex: 1;
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+}
+
+.ai-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-panel-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .ai-log {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   background: #0f172a;
   color: #e2e8f0;
@@ -246,4 +271,10 @@
 .ai-input-row button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .ai-panels {
+    flex-direction: column;
+  }
 }

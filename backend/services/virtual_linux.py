@@ -1,11 +1,37 @@
 """Deterministic, side-effect-free Linux state simulator."""
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
 from services.command_parser import ParsedCommand, parse_command
+
+# Plausible-looking names for directories the curriculum fixture never defined.
+# Chosen deterministically from the path so repeated `ls` on the same unknown
+# path (even across a fresh state, before it is persisted) looks identical.
+_PLAUSIBLE_ENTRIES = (
+    "README.md", "notes.txt", "config.yaml", "backup.tar.gz", "app.log",
+    "data.csv", "scripts", "downloads", "documents", ".bashrc",
+    "report.pdf", "cache",
+)
+
+
+def _plausible_directory_listing(path: str) -> list[str]:
+    digest = hashlib.sha256(path.encode("utf-8")).digest()
+    count = 3 + (digest[0] % 4)  # 3..6 entries
+    picked: list[str] = []
+    seen: set[int] = set()
+    cursor = 1
+    while len(picked) < count and len(seen) < len(_PLAUSIBLE_ENTRIES):
+        index = digest[cursor % len(digest)] % len(_PLAUSIBLE_ENTRIES)
+        cursor += 1
+        if index in seen:
+            continue
+        seen.add(index)
+        picked.append(_PLAUSIBLE_ENTRIES[index])
+    return sorted(picked)
 
 
 @dataclass(frozen=True)
@@ -99,7 +125,7 @@ def _apply(state: dict[str, Any], command: ParsedCommand) -> str | None:
         return "mode changed"
     if name == "ls" and not args:
         entries: set[str] = set()
-        for path in state.get("files", {}):
+        for path in list(state.get("files", {})) + list(state.get("directories", {})):
             if isinstance(path, str) and path.startswith("/"):
                 component = path.lstrip("/").split("/", 1)[0]
                 if component:
@@ -109,11 +135,21 @@ def _apply(state: dict[str, Any], command: ParsedCommand) -> str | None:
                 entries.add(pseudo)
         return "\n".join(sorted(entries)) if entries else "(empty simulated directory)"
     if name == "ls" and len(args) == 1:
-        file_state = state.get("files", {}).get(args[0])
-        return f'{file_state["owner"]} {file_state["group"]} {file_state["mode"]}' if file_state else None
+        path = args[0]
+        file_state = state.get("files", {}).get(path)
+        if file_state is not None:
+            return f'{file_state["owner"]} {file_state["group"]} {file_state["mode"]}'
+        # Unknown path: generate a plausible listing once and persist it so
+        # repeat visits (and other commands referencing the same path) stay
+        # consistent without the curriculum fixture pre-declaring every path.
+        directories = state.setdefault("directories", {})
+        if path not in directories:
+            directories[path] = _plausible_directory_listing(path)
+        entries = directories[path]
+        return "\n".join(entries) if entries else "(empty simulated directory)"
     if name == "cat" and len(args) == 1 and args[0] in state.get("files", {}):
         return "read allowed by simulated policy"
-    if name == "ss" and not args:
+    if name == "ss" and len(args) <= 1:
         ports = state.get("listening_ports", [])
         if 22 in ports:
             state.setdefault("diagnosis", {})["ssh_listening"] = True

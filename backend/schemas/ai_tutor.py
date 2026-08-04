@@ -107,13 +107,11 @@ class CommandResponse(BaseModel):
     task_id: str
     version: int
     attempt_id: int
-    assistant_message_id: int | None
     result_code: str
     output: str
     state_before: dict[str, Any]
     state_after: dict[str, Any]
     progress: ProgressInfo
-    bedrock: BedrockInfo
 
 
 class ChatResponse(BaseModel):

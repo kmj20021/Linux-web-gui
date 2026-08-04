@@ -90,16 +90,41 @@ def main() -> None:
     assert execute_command(inactive, "curl http://localhost").result_code == "unsupported_syntax"
 
     invalid_shapes = [
-        "ls -la", "ls relative", "ls /not/in/state", "curl -L http://localhost",
+        "ls -la", "ls relative", "curl -L http://localhost",
         "curl -I http://example.com", "curl http://example.com",
         "systemctl", "systemctl start", "systemctl start nginx extra",
-        "systemctl status nginx extra", "ss -lnt",
+        "systemctl status nginx extra", "ss -K", "ss -tlnp extra", "ss --all",
     ]
     for command in invalid_shapes:
         invalid = execute_command(common_state, command)
         assert invalid.result_code == "unsupported_syntax", command
         assert invalid.state_before == invalid.state_after == common_state
-    for output in (ls_result.output, service_output.output, headers.output, refused.output):
+
+    # Real-world listening-port checks use flags (`ss -tlnp`, `ss -lnt`, ...);
+    # they must behave exactly like bare `ss`, not be rejected as unsupported.
+    listening = {"listening_ports": [22]}
+    bare = execute_command(listening, "ss")
+    for flagged in ("ss -tlnp", "ss -lnt", "ss -tuln", "ss -a"):
+        result = execute_command(listening, flagged)
+        assert result.result_code == "success" and result.output == bare.output, flagged
+        assert result.state_after == bare.state_after, flagged
+
+    # An unknown path is not an error: the simulator invents a plausible
+    # listing once, persists it (state_after), and returns the same listing
+    # on every later call so the fixture never has to pre-declare every path.
+    unknown = execute_command(common_state, "ls /not/in/state")
+    assert unknown.result_code == "success"
+    assert unknown.output and "/" not in unknown.output.split("\n")[0]
+    assert unknown.state_before == common_state
+    assert unknown.state_after["directories"]["/not/in/state"] == unknown.output.split("\n")
+    assert common_state == common_copy, "caller state must not be mutated"
+    assert execute_command(common_state, "ls /not/in/state") == unknown
+    persisted = execute_command(unknown.state_after, "ls /not/in/state")
+    assert persisted.output == unknown.output and persisted.state_before == persisted.state_after
+    other_path = execute_command(common_state, "ls /also/unknown")
+    assert other_path.output != unknown.output, "different paths should not collide by construction"
+
+    for output in (ls_result.output, service_output.output, headers.output, refused.output, unknown.output):
         assert "\x1b" not in output and "\x07" not in output
 
     print("PASS: fixture 24, common outputs, determinism, unsupported syntax, immutable simulation")

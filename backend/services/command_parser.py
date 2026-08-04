@@ -20,6 +20,9 @@ class ParseResult:
 
 
 _SHELL_SYNTAX = re.compile(r"(?:\r|\n|;|&&|\|\||\||`|\$\(|>>|2>|[<>])")
+# Real `ss` listening-port checks always look like `-tlnp`/`-lnt`/etc: a single
+# leading dash followed by short option letters. Anything else is rejected.
+_SS_FLAGS = re.compile(r"-[tulnpaxw46]+")
 _ACTIONS = {
     "systemctl": {"status", "start", "stop", "restart", "enable", "disable"},
     "ufw": {"allow", "deny", "status"},
@@ -64,7 +67,9 @@ def parse_command(command_text: str) -> ParseResult:
             (len(arguments) == 1 and arguments[0].startswith("/") and not arguments[0].startswith("/-"))
         ):
             return ParseResult("unsupported_syntax")
-        if name == "ss" and arguments:
+        if name == "ss" and arguments and not (
+            len(arguments) == 1 and _SS_FLAGS.fullmatch(arguments[0])
+        ):
             return ParseResult("unsupported_syntax")
         return ParseResult("success", ParsedCommand(name, arguments=arguments))
     return ParseResult("unsupported_syntax")
