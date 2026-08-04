@@ -1,20 +1,24 @@
 name: CI
 
+# users : 남들이 만들어 둔 코드를 사용
+# run   : 직접 명령어를 실행
+
+# 언제 돌지 정해주는 부분
 on:
-  push:
-  pull_request:
+  push: #코드를 올릴 때 마다
+  pull_request: #PR을 만들거나 업데이트할 때 마다
 
 permissions:
   contents: read
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  #어떤 컴퓨터를 사용할지
     steps:
-      - name: Checkout
+      - name: Checkout  #코드 내려 받기
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.11  # 파이썬 설치
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -22,29 +26,29 @@ jobs:
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
 
-      - name: Install backend dependencies
+      - name: Install backend dependencies  # requirements.txt 설치
         run: python -m pip install -r backend/requirements.txt
 
-      - name: Run backend tests
+      - name: Run backend tests # pytest 196개
         run: python -m pytest backend/tests
 
-      - name: Set up Node 20
+      - name: Set up Node 20  # Node.js 설치
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
+      - name: Install frontend dependencies # npm 패키지 설치
         run: npm --prefix frontend ci --no-audit --fund=false
 
-      - name: Lint frontend
+      - name: Lint frontend # 코드 스타일 검사
         run: npm --prefix frontend run lint
 
-      - name: Test frontend
+      - name: Test frontend # Vitest 99개
         run: npm --prefix frontend test -- --run
 
-      - name: Build frontend
+      - name: Build frontend  # 실제로 빌드 되는지
         run: npm --prefix frontend run build
 
       # docker-compose.yml 은 SECRET_KEY·DATABASE_URL·DOMAIN_NAME 이 없으면 보간에
