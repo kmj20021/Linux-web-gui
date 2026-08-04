@@ -125,7 +125,11 @@ function AITutor() {
       if (result.progress.completed) {
         setCommandLog(prev => [...prev, { type: 'system', text: '커리큘럼을 모두 완료했습니다.' }])
       } else if (result.grade === 'success') {
-        setCommandLog(prev => [...prev, { type: 'system', text: `다음 문제: ${refreshed.current_problem.title}` }])
+        const isReview = refreshed.current_problem.task_id.startsWith('review_')
+        const text = isReview
+          ? `복습 라운드입니다: ${refreshed.current_problem.title}`
+          : `다음 문제: ${refreshed.current_problem.title}`
+        setCommandLog(prev => [...prev, { type: 'system', text }])
       }
     })
   }
@@ -152,19 +156,32 @@ function AITutor() {
           <h2 className="ai-section-title">커리큘럼</h2>
           {curriculumError && <div className="ai-error">{curriculumError}</div>}
           <ul className="ai-problem-list">
-            {curriculum.map((problem) => (
-              <li key={`${problem.scenario_id}:${problem.task_id}`}>
-                <button
-                  className={`ai-problem-item ${session?.current_problem?.task_id === problem.task_id ? 'active' : ''}`}
-                  onClick={() => startProblem(problem)}
-                  disabled={busy}
-                >
-                  <span className="ai-problem-index">{problem.task_index}/{problem.total_tasks}</span>
-                  <span className="ai-problem-title">{problem.title}</span>
-                  <span className={`ai-problem-difficulty ai-diff-${problem.difficulty}`}>{problem.difficulty}</span>
-                </button>
-              </li>
-            ))}
+            {curriculum.map((problem) => {
+              // The catalog's final slot is a generic preview: the real
+              // problem (task_id "review_<id>") is only chosen once a
+              // session completes the first five, so it can't be started
+              // directly here.
+              const isReviewPlaceholder = problem.task_id === 'review'
+              const isActive = session?.current_problem?.task_id === problem.task_id
+                || (isReviewPlaceholder && session?.current_problem?.task_id?.startsWith('review_'))
+              return (
+                <li key={`${problem.scenario_id}:${problem.task_id}`}>
+                  <button
+                    className={`ai-problem-item ${isActive ? 'active' : ''} ${isReviewPlaceholder ? 'ai-review-locked' : ''}`}
+                    onClick={() => !isReviewPlaceholder && startProblem(problem)}
+                    disabled={busy || isReviewPlaceholder}
+                    title={isReviewPlaceholder ? '앞의 5문제를 모두 완료하면 자동으로 진행됩니다.' : undefined}
+                  >
+                    <span className="ai-problem-title">{problem.title}</span>
+                    {isReviewPlaceholder ? (
+                      <span className="ai-problem-difficulty ai-review-badge">복습</span>
+                    ) : (
+                      <span className={`ai-problem-difficulty ai-diff-${problem.difficulty}`}>{problem.difficulty}</span>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </aside>
 
@@ -173,7 +190,12 @@ function AITutor() {
         ) : (
           <div className="ai-workspace">
             <div className="ai-problem-card">
-              <h3>{session.current_problem.title}</h3>
+              <h3>
+                {session.current_problem.title}
+                {session.current_problem.task_id.startsWith('review_') && (
+                  <span className="ai-review-badge ai-review-badge-card">복습 라운드</span>
+                )}
+              </h3>
               <p>{session.current_problem.description}</p>
               <div className="ai-problem-meta">
                 <span>학습 목표: {session.current_problem.learning_goal}</span>

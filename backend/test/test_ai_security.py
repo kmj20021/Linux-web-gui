@@ -25,7 +25,7 @@ from schemas.ai_tutor import (ChatRequest, CommandRequest, ResetRequest, Session
                               VersionRequest)
 from services.ai_rate_limit import bedrock_rate_limiter
 from services.bedrock import BedrockMetadata, BedrockTutorResult, TutorModelResponse, build_prompt
-from services.curriculum import list_problems
+from services.curriculum import get_problem, list_problems
 
 
 class FakeBedrock:
@@ -79,7 +79,9 @@ async def complete_all(db, user, marker):
         CommandRequest(command_text=f"unsupported-{marker}", expected_version=1), db, user)
     assert marked.result_code == "unsupported_syntax" and marked.version == 1
     version = 1
-    for problem in list_problems():
+    # The final slot is a review round of an already-completed problem, not
+    # a fixed sixth fixture problem, so resolve its commands at run time.
+    for problem in list_problems()[:-1]:
         assert (await get_session(session.id, db, user)).task_key == problem["problem_id"]
         for text in problem["answer_examples"]["correct"]["commands"]:
             result = await execute_learning_command(session.id,
@@ -87,6 +89,15 @@ async def complete_all(db, user, marker):
             version = result.version
         result = await grade(session.id, VersionRequest(expected_version=version), db, user)
         version = result.version
+    review_session = await get_session(session.id, db, user)
+    assert review_session.task_key.startswith("review_")
+    review_problem = get_problem(review_session.scenario_key, review_session.task_key)
+    for text in review_problem["answer_examples"]["correct"]["commands"]:
+        result = await execute_learning_command(session.id,
+            CommandRequest(command_text=text, expected_version=version), db, user)
+        version = result.version
+    result = await grade(session.id, VersionRequest(expected_version=version), db, user)
+    version = result.version
     restored = await get_session(session.id, db, user)
     assert restored.status == "completed" and restored.completed_at
     return session.id
@@ -126,7 +137,9 @@ async def main():
             second_final = await get_session(second_id, db, second)
             assert first_final.user_id == first.id and second_final.user_id == second.id
             assert first_final.status == second_final.status == "completed"
-            assert first_final.task_key == second_final.task_key == "remote_access_recovery_02"
+            # The final slot is a random review round, seeded per-session, so
+            # only the review_ prefix (not the exact underlying id) is fixed.
+            assert first_final.task_key.startswith("review_") and second_final.task_key.startswith("review_")
             assert first_final.virtual_state.id != second_final.virtual_state.id
             assert first_final.virtual_state.state_json is not second_final.virtual_state.state_json
 

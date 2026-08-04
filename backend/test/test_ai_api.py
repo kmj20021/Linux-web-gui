@@ -23,7 +23,7 @@ from schemas.ai_tutor import (ChatRequest, CommandRequest, ResetRequest, Session
                               VersionRequest)
 from services.ai_rate_limit import bedrock_rate_limiter
 from services.bedrock import BedrockMetadata, BedrockTutorResult, TutorModelResponse
-from services.curriculum import initial_state, list_problems
+from services.curriculum import get_problem, initial_state, list_problems
 
 
 async def expect_http(code, awaitable):
@@ -60,13 +60,15 @@ async def main() -> None:
             curriculum = await get_curriculum(owner)
             fixture_problems = list_problems()
             assert curriculum.total_tasks == 6 and len(curriculum.items) == 6
-            assert [item.task_id for item in curriculum.items] == [
-                item["problem_id"] for item in fixture_problems
+            # The final slot previews the review round generically; only the
+            # first five items map 1:1 onto fixture problems.
+            assert [item.task_id for item in curriculum.items[:-1]] == [
+                item["problem_id"] for item in fixture_problems[:-1]
             ]
-            assert [item.scenario_id for item in curriculum.items] == [
-                item["scenario_id"] for item in fixture_problems
+            assert [item.scenario_id for item in curriculum.items[:-1]] == [
+                item["scenario_id"] for item in fixture_problems[:-1]
             ]
-            for index, item in enumerate(curriculum.items, start=1):
+            for index, item in enumerate(curriculum.items[:-1], start=1):
                 fixture_problem = fixture_problems[index - 1]
                 assert item.task_index == index and item.total_tasks == 6
                 assert item.title == fixture_problem["title"]
@@ -74,6 +76,10 @@ async def main() -> None:
                 assert item.learning_goal and item.difficulty in {
                     "beginner", "intermediate", "advanced"
                 }
+            review_item = curriculum.items[-1]
+            assert review_item.task_id == "review" and review_item.scenario_id == "review"
+            assert review_item.task_index == 6 and review_item.total_tasks == 6
+            assert review_item.difficulty == "advanced" and review_item.learning_goal
 
             # Per-user concurrency is isolated; one user cannot block another.
             bedrock_rate_limiter.cooldown_seconds = 2
@@ -93,13 +99,18 @@ async def main() -> None:
             assert created.started_at.isoformat()
 
             class FakeBedrock:
+                def __init__(self):
+                    self.calls = []
+
                 def tutor(self, **kwargs):
+                    self.calls.append(kwargs)
                     return BedrockTutorResult(degraded=False, reason=None, retryable=False,
                         message="안전한 설명", response=TutorModelResponse(
                             terminal_output="ok", explanation="안전한 설명", hint_level=0,
                             suggested_concept="service"), metadata=BedrockMetadata(
                                 latency_ms=1, attempts=1))
-            ai_router.bedrock_service = FakeBedrock()
+            fake_bedrock = FakeBedrock()
+            ai_router.bedrock_service = fake_bedrock
             bedrock_rate_limiter.cooldown_seconds = 0
             await bedrock_rate_limiter.reset()
 
@@ -114,10 +125,13 @@ async def main() -> None:
             assert listed_attempt.data["output_text"] == listed.output
             assert listed_attempt.data["state_before"] == listed_attempt.data["state_after"]
 
-            # Complete all six tasks through the public service functions without Bedrock/AWS.
+            # Complete the five real tasks through the public service functions
+            # without Bedrock/AWS. The sixth (final) slot is a review round of
+            # one of these five, not a fixed sixth fixture problem.
             complete_session = await create_session(payload, db, owner)
             complete_version = 1
-            for index, problem in enumerate(list_problems()):
+            static_problems = list_problems()
+            for index, problem in enumerate(static_problems[:-1]):
                 assert (await get_session(complete_session.id, db, owner)).task_key == problem["problem_id"]
                 assert (await get_session(complete_session.id, db, owner)).current_problem.task_index == index + 1
                 for command_text in problem["answer_examples"]["correct"]["commands"]:
@@ -128,7 +142,24 @@ async def main() -> None:
                     VersionRequest(expected_version=complete_version), db, owner)
                 assert completion_grade.grade == "success"
                 complete_version = completion_grade.version
-                assert completion_grade.progress.completed == (index == 5)
+                assert completion_grade.progress.completed is False
+
+            review_session = await get_session(complete_session.id, db, owner)
+            assert review_session.task_key.startswith("review_")
+            assert review_session.current_problem.task_index == 6
+            assert review_session.current_problem.total_tasks == 6
+            assert review_session.current_problem.difficulty == "advanced"
+            real_task_key = review_session.task_key.removeprefix("review_")
+            assert real_task_key in {p["problem_id"] for p in static_problems[:-1]}
+            review_problem = get_problem(review_session.scenario_key, review_session.task_key)
+            for command_text in review_problem["answer_examples"]["correct"]["commands"]:
+                executed = await execute_learning_command(complete_session.id,
+                    CommandRequest(command_text=command_text, expected_version=complete_version), db, owner)
+                complete_version = executed.version
+            completion_grade = await grade(complete_session.id,
+                VersionRequest(expected_version=complete_version), db, owner)
+            assert completion_grade.grade == "success" and completion_grade.progress.completed
+            complete_version = completion_grade.version
             completed_session = await get_session(complete_session.id, db, owner)
             assert completed_session.status == "completed" and completed_session.completed_at
             rejected = await execute_learning_command(created.id,
@@ -150,6 +181,9 @@ async def main() -> None:
             await bedrock_rate_limiter.reset(); bedrock_rate_limiter.cooldown_seconds = 0
             chat_result = await chat(created.id, ChatRequest(message="왜 그런가요?"), Response(), db, owner)
             assert chat_result.user_message_id and chat_result.assistant_message_id
+            # First turn in the session: no prior chat or grade history to feed back.
+            assert fake_bedrock.calls[-1]["recent_conversation"] == []
+            assert fake_bedrock.calls[-1]["learner_history"] == []
 
             # A successful task cannot issue a hint; grading advances atomically.
             await expect_http(409, hint(created.id, VersionRequest(expected_version=2), Response(), db, owner))
@@ -161,10 +195,24 @@ async def main() -> None:
             assert advanced.current_problem.task_id == "service_recovery_02"
             assert advanced.current_problem.task_index == 2
 
+            # A later chat turn now sees the earlier turn and the completed task's grade.
+            second_chat = await chat(created.id, ChatRequest(message="다음엔 뭘 하나요?"), Response(), db, owner)
+            assert second_chat.user_message_id
+            assert fake_bedrock.calls[-1]["recent_conversation"] == [
+                {"role": "user", "content": "왜 그런가요?"},
+                {"role": "assistant", "content": "안전한 설명"},
+            ]
+            assert fake_bedrock.calls[-1]["learner_history"] == [
+                {"task_key": "service_recovery_01", "grade": "success"},
+            ]
+
             await bedrock_rate_limiter.reset()
             hint_result = await hint(created.id, VersionRequest(expected_version=3), Response(), db, owner)
             assert hint_result.hint_level == 1 and hint_result.hint_message_id
             assert hint_result.version == 4
+            assert fake_bedrock.calls[-1]["learner_history"] == [
+                {"task_key": "service_recovery_01", "grade": "success"},
+            ]
             await expect_http(409, hint(created.id, VersionRequest(expected_version=3), Response(), db, owner))
             audited_history = await get_history(created.id, db, owner)
             assert any(item.type == "interaction" and item.data["action"] == "grade"

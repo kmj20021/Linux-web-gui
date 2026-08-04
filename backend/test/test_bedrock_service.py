@@ -111,6 +111,24 @@ def test_prompt_boundary_and_immutability():
     assert result.degraded and result.reason == "invalid_prompt"
 
 
+def test_learner_history_in_prompt_and_defaults_to_empty():
+    inputs = _inputs()
+    inputs["learner_history"] = [
+        {"task_key": "service_recovery_01", "grade": "success"},
+        {"task_key": "service_recovery_02", "grade": "failure"},
+    ]
+    snapshot = deepcopy(inputs)
+    prompt = build_prompt(**inputs)
+    assert '"learner_history":[{"task_key":"service_recovery_01","grade":"success"}' in prompt
+    assert inputs == snapshot
+    without_history = build_prompt(**_inputs())
+    assert '"learner_history":[]' in without_history
+    too_long = _inputs()
+    too_long["learner_history"] = [{"task_key": "x" * 2500, "grade": "failure"}]
+    result = BedrockService(FakeClient()).tutor(**too_long)
+    assert result.degraded and result.reason == "invalid_prompt"
+
+
 def test_valid_raw_and_fenced_response():
     raw = parse_model_response(json.dumps(_body()))
     fenced = parse_model_response("설명\n```json\n" + json.dumps(_body()) + "\n```\n끝")
@@ -205,6 +223,7 @@ def test_logs_exclude_secrets_and_raw_content():
 def main():
     test_client_configuration()
     test_prompt_boundary_and_immutability()
+    test_learner_history_in_prompt_and_defaults_to_empty()
     test_valid_raw_and_fenced_response()
     test_schema_rejections_are_safe_fallbacks()
     test_success_contract_and_no_mutation()

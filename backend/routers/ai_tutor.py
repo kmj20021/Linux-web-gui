@@ -23,7 +23,7 @@ from schemas.ai_tutor import (ChatRequest, ChatResponse, CommandRequest, Command
     ResetRequest, SessionCreate, SessionResponse, VersionRequest)
 from services.ai_rate_limit import bedrock_rate_limiter
 from services.bedrock import BedrockService, BedrockTutorResult
-from services.curriculum import (curriculum_info, get_problem, hint_for_problem,
+from services.curriculum import (REVIEW_PREFIX, curriculum_info, get_problem, hint_for_problem,
                                  initial_state, next_problem, problem_info)
 from services.task_grader import grade_problem
 from services.virtual_linux import execute_command
@@ -98,6 +98,23 @@ async def _task_stats(db: AsyncSession, session: AILearningSession) -> tuple[int
     return attempts, max(hints, default=0)
 
 
+async def _recent_conversation(db: AsyncSession, session: AILearningSession,
+                                limit: int = 4) -> list[dict]:
+    rows = (await db.execute(select(AIChatMessage)
+        .where(AIChatMessage.session_id == session.id)
+        .order_by(AIChatMessage.id.desc()).limit(limit))).scalars().all()
+    return [{"role": row.role, "content": row.content} for row in reversed(rows)]
+
+
+async def _learner_history(db: AsyncSession, session: AILearningSession,
+                            limit: int = 5) -> list[dict]:
+    rows = (await db.execute(select(AIInteractionAudit)
+        .where(AIInteractionAudit.session_id == session.id,
+               AIInteractionAudit.action == "grade")
+        .order_by(AIInteractionAudit.id.desc()).limit(limit))).scalars().all()
+    return [{"task_key": row.task_key, "grade": row.result_code} for row in reversed(rows)]
+
+
 async def _owned_session(db: AsyncSession, session_id: int, user_id: int) -> AILearningSession:
     result = await db.execute(
         select(AILearningSession)
@@ -144,6 +161,9 @@ async def create_session(
     db: AsyncSession = Depends(get_db),
     current_user: WebUser = Depends(get_current_user),
 ):
+    if request.task_key.startswith(REVIEW_PREFIX):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="Review tasks are only reachable by completing the curriculum")
     state = initial_state(request.scenario_key, request.task_key)
     if state is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown scenario/problem combination")
@@ -300,7 +320,8 @@ async def execute_learning_command(session_id: int, request: CommandRequest,
     problem = get_problem(session.scenario_key, session.task_key)
     grade = grade_problem(problem, session.virtual_state.state_json).grade
     attempts, hint_level = await _task_stats(db, session)
-    following = next_problem(session.scenario_key, session.task_key, grade=grade) if grade == "success" else None
+    following = (next_problem(session.scenario_key, session.task_key, grade=grade,
+        session_seed=session.id) if grade == "success" else None)
     return CommandResponse(session_id=session.id, scenario_id=session.scenario_key,
         task_id=session.task_key, version=session.virtual_state.version,
         attempt_id=attempt.id, result_code=execution.result_code,
@@ -318,15 +339,19 @@ async def chat(session_id: int, request: ChatRequest, response: Response,
         raise HTTPException(409, "Curriculum is completed")
     problem = get_problem(session.scenario_key, session.task_key)
     grade = grade_problem(problem, session.virtual_state.state_json).grade
+    recent_conversation = await _recent_conversation(db, session)
+    learner_history = await _learner_history(db, session)
     result = await _call_bedrock(current_user.id, learner_level=session.level,
         problem=problem, state_summary=session.virtual_state.state_json, grade=grade,
-        user_input=request.message)
+        user_input=request.message, recent_conversation=recent_conversation,
+        learner_history=learner_history)
     user_msg = AIChatMessage(session_id=session.id, role="user", content=request.message)
     assistant = AIChatMessage(session_id=session.id, role="assistant", content=result["message"])
     db.add_all([user_msg, assistant])
     await db.commit(); await db.refresh(user_msg); await db.refresh(assistant)
     attempts, hint_level = await _task_stats(db, session)
-    following = next_problem(session.scenario_key, session.task_key, grade=grade) if grade == "success" else None
+    following = (next_problem(session.scenario_key, session.task_key, grade=grade,
+        session_seed=session.id) if grade == "success" else None)
     return ChatResponse(session_id=session.id, scenario_id=session.scenario_key,
         task_id=session.task_key, version=session.virtual_state.version,
         user_message_id=user_msg.id, assistant_message_id=assistant.id,
@@ -347,9 +372,10 @@ async def hint(session_id: int, request: VersionRequest, response: Response,
     attempts, current_hint = await _task_stats(db, session)
     level = min(3, current_hint + 1)
     fixed = hint_for_problem(session.scenario_key, session.task_key, level)
+    learner_history = await _learner_history(db, session)
     result = await _call_bedrock(current_user.id, learner_level=session.level,
         problem=problem, state_summary=session.virtual_state.state_json, grade="failure",
-        user_input=f"규칙 기반 힌트 {level}: {fixed['text']}")
+        user_input=f"규칙 기반 힌트 {level}: {fixed['text']}", learner_history=learner_history)
     hint_msg = AIChatMessage(session_id=session.id, role="hint", content=fixed["text"])
     assistant = AIChatMessage(session_id=session.id, role="assistant", content=result["message"])
     audit = AIInteractionAudit(session_id=session.id, action="hint",
@@ -386,7 +412,7 @@ async def grade(session_id: int, request: VersionRequest,
     result = grade_problem(problem, session.virtual_state.state_json, commands,
         previous_attempts=attempts, hint_level=hint_level)
     old_scenario, old_task = session.scenario_key, session.task_key
-    following = next_problem(old_scenario, old_task, grade=result.grade)
+    following = next_problem(old_scenario, old_task, grade=result.grade, session_seed=session.id)
     completed = result.grade == "success" and following is None
     next_version = request.expected_version + 1
     target_state = (following["initial_state"]
