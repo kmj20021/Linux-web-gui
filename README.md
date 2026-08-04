@@ -136,6 +136,10 @@ DATABASE_URL=sqlite+aiosqlite:////app/linux_web_gui.db
 DOMAIN_NAME=your-domain.com
 ```
 
+> 도메인이 없는 환경이면 `DOMAIN_NAME`에 **고정 공인 IP**를 넣고 개발 프로필로
+> 실행합니다. IP에는 TLS 인증서를 발급받을 수 없으므로 운영 프로필은 실행되지
+> 않습니다. 위험과 절차는 `docs/operations.md` §4.3을 보세요.
+
 > `SECRET_KEY`에 `changeme`, `secret`, `placeholder` 같은 **알려진 placeholder를 넣으면
 > 서버가 시작을 거부합니다.** 기본 관리자 계정도 자동 생성되지 않습니다.
 
@@ -148,12 +152,16 @@ docker build -f Dockerfile.webterm -t webterm:latest .
 ### 3. 실행
 
 ```bash
-# 운영 (HTTPS, 인증서 필수)
+# 도메인이 있는 경우 — 운영 (HTTPS, 인증서 필수)
 docker compose up -d
 
-# 개발 (HTTP 허용)
+# 도메인이 없거나 로컬 개발 — HTTP (개발 override)
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
+
+인증서 없이 운영 프로필을 띄우면 컨테이너가 **재시작 루프에 빠집니다**(의도된 동작).
+`docker compose up -d`는 성공한 것처럼 보이므로 `docker compose ps`로 `Restarting`
+여부를 확인하세요.
 
 ### 4. 최초 관리자 생성
 
@@ -301,6 +309,10 @@ CPU·메모리·디스크·네트워크 수집이 실패하면 0이나 빈 배�
 - **운영 프로필은 TLS 인증서가 없으면 시작에 실패합니다.** HTTP fallback은 개발
   override(`APP_ENV=development`)에서만 허용됩니다.
 - 필수 환경변수가 없으면 Compose 단계에서 실패합니다(fail-closed).
+- **현재 배포 환경은 도메인 발급이 불가해 고정 IP + HTTP로 운영합니다.** 그 결과
+  자격증명과 토큰이 평문으로 전송됩니다. 코드의 TLS 강제는 유지하되 이 환경에서는
+  해당 경로를 쓰지 못하는 것이며, 완화책은 인바운드 소스 제한입니다.
+  자세한 위험은 `docs/operations.md` §4.3과 §7을 보세요.
 
 ### 웹터미널 샌드박스
 
@@ -379,7 +391,8 @@ Windows에서 메모리 카드의 buffers·cached가 0으로 보이는 것은 **
 | 증상 | 원인과 조치 |
 |---|---|
 | 서버가 즉시 종료됨 | `SECRET_KEY` 미설정 또는 placeholder. 임의 값으로 교체하세요. |
-| 운영 컨테이너가 시작하지 않음 | TLS 인증서가 없습니다. `docs/operations.md`의 인증서 발급 절차를 따르거나 개발 프로필로 실행하세요. |
+| 운영 컨테이너가 시작하지 않음 | TLS 인증서가 없습니다. `docs/operations.md`의 인증서 발급 절차를 따르거나 개발 프로필로 실행하세요. `docker compose ps`에서 `Restarting`으로 보입니다. |
+| 개발 프로필인데 브라우저가 HTTPS로 넘어감 | 운영 프로필로 먼저 접속했다면 브라우저가 `return 301`(영구 리디렉션)을 캐시한 것입니다. 컨테이너 문제가 아닙니다. 시크릿 창으로 확인하거나 해당 사이트의 캐시를 지우세요. `curl -sS -o /dev/null -w '%{http_code}\n' http://localhost/`가 200이면 서버는 정상입니다. |
 | 로그인은 되는데 대시보드가 비어 있음 | WebSocket ticket 발급 실패. 브라우저 네트워크 탭에서 `/api/auth/ws-tickets/monitor` 응답을 확인하세요. |
 | 터미널 안에서 `apt`·`ping`이 안 됨 | 의도된 동작입니다. 셸 컨테이너는 네트워크가 `none`입니다. |
 | 터미널 세션 생성 실패 | 동시 세션 한도(사용자당 1, 전체 5)에 걸렸을 수 있습니다. |

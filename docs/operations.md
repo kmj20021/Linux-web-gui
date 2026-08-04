@@ -13,7 +13,7 @@ DB 마이그레이션·복구는 `docs/db-operations.md`를 참고하세요.
 |---|---|---|
 | `SECRET_KEY` | **필수** | JWT·ticket 서명 키. 미설정이거나 알려진 placeholder면 서버가 시작을 거부한다. |
 | `DATABASE_URL` | **필수** | 예: `sqlite+aiosqlite:////app/linux_web_gui.db` (컨테이너 내부 절대경로) |
-| `DOMAIN_NAME` | **필수** | Nginx 설정과 TLS 인증서 경로에 사용 |
+| `DOMAIN_NAME` | **필수** | Nginx 설정과 TLS 인증서 경로에 사용. 도메인이 없는 환경에서는 고정 공인 IP를 넣습니다(§4 참고) |
 | `ALGORITHM` | 선택 | 기본 `HS256` |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | 선택 | Compose에서 `1440`으로 설정됨 |
 | `APP_ENV` | 선택 | `development`면 HTTP 허용. 미설정 시 `production` |
@@ -81,7 +81,10 @@ npm --prefix frontend run dev
 
 ## 3. Docker 개발 프로필 (HTTP)
 
-TLS 없이 전체 스택을 띄웁니다. **운영에 사용하지 마세요.**
+TLS 없이 전체 스택을 띄웁니다. 원래 의도는 로컬 개발용이지만, **도메인을 발급받을
+수 없는 배포 환경에서는 이것이 유일하게 실행 가능한 경로**입니다. 그 경우의 위험과
+절차는 §4.3을 보세요. 공개망에 이 프로필을 그대로 노출하는 것은 §4.3의 위험을
+받아들인다는 뜻입니다.
 
 ```bash
 docker build -f Dockerfile.webterm -t webterm:latest .
@@ -98,13 +101,27 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 ---
 
-## 4. 운영 배포 (HTTPS)
+## 4. 운영 배포
 
-### 4.1 사전 조건
+### 4.1 배포 방식 선택
 
-- 공인 IP와 A 레코드가 연결된 도메인
-- 80·443 인바운드 허용
+**도메인 유무에 따라 경로가 완전히 갈립니다.** 먼저 여기서 판단하세요.
+
+| 조건 | 경로 | 프로필 |
+|---|---|---|
+| A 레코드를 연결할 도메인이 있다 | §4.4 (HTTPS) | 운영 (`docker compose up -d`) |
+| 도메인을 받을 수 없다 | §4.3 (고정 IP + HTTP) | 개발 override 필수 |
+
+Let's Encrypt는 **IP 주소에 인증서를 발급하지 않습니다.** 따라서 도메인이 없으면
+운영 프로필은 선택지가 아니라 **실행 자체가 불가능**합니다. 인증서 없이 운영
+프로필을 띄우면 `frontend/start.sh:18-21`이 의도적으로 종료하고, `restart: always`
+때문에 컨테이너가 무한 재시작합니다. 이때 `docker compose up -d`는 성공한 것처럼
+보이므로 반드시 `docker compose ps`로 `Restarting` 여부를 확인하세요.
+
+공통 사전 조건:
+
 - `.env`에 필수 환경변수 3종
+- 인바운드 허용 (HTTPS 경로는 80·443, HTTP 경로는 80만)
 
 ### 4.2 웹터미널 이미지
 
@@ -114,7 +131,69 @@ docker build -f Dockerfile.webterm -t webterm:latest .
 
 이미지가 없으면 터미널 세션 생성이 실패합니다.
 
-### 4.3 TLS 인증서 발급 (최초 1회)
+### 4.3 도메인이 없는 환경 (고정 IP + HTTP)
+
+관리자가 할당한 고정 공인 IP만 사용할 수 있고 도메인 발급이 불가한 배포 환경을
+위한 절차입니다. **이 경로는 TLS 없이 공개망에 서비스하므로 아래 위험을 인지하고
+수용한 경우에만 사용하세요.**
+
+#### 위험
+
+- **로그인 자격증명과 JWT가 평문으로 전송됩니다.** 경로상의 누구든 가로채면 그대로
+  세션을 탈취할 수 있습니다. WebSocket ticket도 마찬가지입니다.
+- **중간자 공격을 탐지할 수 없습니다.** 응답 변조 여부를 검증할 수단이 없습니다.
+- HSTS·secure 쿠키 등 TLS 전제 방어가 동작하지 않습니다.
+
+#### 위험 완화
+
+TLS를 못 쓰는 대신 **노출 면적을 줄이는 것**이 유일한 실질적 완화책입니다.
+
+- 인바운드 소스를 `0.0.0.0/0`이 아니라 **사용 IP `/32`** 로 제한하도록 요청합니다.
+- 443은 열지 않습니다.
+- 계정 수를 최소로 유지하고, 셸 권한은 꼭 필요한 admin에게만 부여합니다.
+
+#### 절차
+
+```bash
+# .env 의 DOMAIN_NAME 에는 고정 공인 IP 를 넣는다.
+#   DOMAIN_NAME=<고정 IP>
+# 개발 override 가 APP_ENV=development 를 설정해 인증서 검사를 건너뛴다.
+
+mkdir -p data
+touch data/linux_web_gui.db        # 없으면 Docker 가 같은 이름의 디렉터리를 만든다
+
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+```
+
+**`-f` 두 개를 항상 함께 씁니다.** 하나라도 빠뜨리면 운영 프로필로 돌아가 컨테이너가
+재시작 루프에 빠집니다. `ps`·`logs`·`down` 등 이후 모든 명령에 동일하게 적용됩니다.
+
+기동 확인:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs frontend | head -5
+# "Development mode: HTTP configuration enabled" 이 보여야 한다
+
+curl -sS -o /dev/null -w '%{http_code}\n' http://localhost/     # 200
+```
+
+`/health`는 운영 설정에서도 80번 포트에서 200을 반환하므로(`frontend/nginx.conf:52-56`)
+프로필 판별에 쓸 수 없습니다. 반드시 `/` 로 확인하세요. 여기서 **301**이 나오면 아직
+운영 프로필입니다.
+
+외부에서만 접속이 안 되면 컨테이너가 아니라 방화벽입니다.
+
+```bash
+sudo ss -tlnp | grep ':80'   # 0.0.0.0:80 이어야 한다
+sudo ufw status              # inactive 이거나 80 허용이어야 한다
+```
+
+둘 다 정상인데 접속이 안 되면 클라우드 방화벽(보안 그룹) 인바운드 80이 막힌 것이며,
+권한이 없으면 인프라 관리자에게 요청해야 합니다.
+
+접속: `http://<고정 IP>` (브라우저가 HTTPS로 승격시키지 않도록 `http://`를 명시)
+
+### 4.4 TLS 인증서 발급 (도메인이 있는 경우, 최초 1회)
 
 운영 프로필은 인증서가 없으면 **의도적으로 시작에 실패**합니다. 순서가 중요합니다.
 
@@ -136,22 +215,31 @@ docker compose up -d
 발급된 인증서는 `letsencrypt` 볼륨에 저장되며, `certbot` 서비스가 12시간 주기로
 자동 갱신합니다.
 
-### 4.4 기동
+### 4.5 기동 (도메인이 있는 경우)
 
 ```bash
 docker compose up -d
 docker compose ps
 ```
 
-### 4.5 배포 후 확인
+도메인이 없는 환경의 기동은 §4.3을 따릅니다.
+
+### 4.6 배포 후 확인
+
+아래에서 `<base>`는 HTTPS 경로면 `https://<도메인>`, 고정 IP 경로면
+`http://<고정 IP>` 입니다. 개발 프로필로 띄웠다면 `docker compose` 명령에도
+`-f docker-compose.yml -f docker-compose.dev.yml`을 붙여야 합니다.
 
 ```bash
+# 컨테이너가 재시작 루프에 빠지지 않았는지 (STATUS 에 Restarting 이 없어야 한다)
+docker compose ps
+
 # 백엔드가 호스트에 직접 노출되지 않아야 한다 (연결 거부가 정상)
 curl -sS -o /dev/null -w '%{http_code}\n' http://localhost:8000/api/health || echo "차단됨 (정상)"
 
 # 미인증 요청은 401 이어야 한다
-curl -sS -o /dev/null -w '%{http_code}\n' https://<도메인>/api/monitor/cpu     # 401
-curl -sS -o /dev/null -w '%{http_code}\n' https://<도메인>/api/monitor/processes # 401
+curl -sS -o /dev/null -w '%{http_code}\n' <base>/api/monitor/cpu     # 401
+curl -sS -o /dev/null -w '%{http_code}\n' <base>/api/monitor/processes # 401
 
 # 로그에 JWT·ticket 원문이 없어야 한다 (0건이 정상)
 docker compose logs backend  | grep -cE 'eyJ[A-Za-z0-9_-]{10,}|ticket=' || true
@@ -208,6 +296,15 @@ backend pytest, frontend lint·test·build, 운영·개발 Compose 구성, 소�
 
 계획·구현상 현재 남아 있는 제약입니다. 배포 전에 인지하고 있어야 합니다.
 
+- **현 배포 환경은 도메인 발급이 불가하다**: 인스턴스는 인프라 관리자에게 권한을
+  받아 사용하는 계정이며 고정 공인 IP만 할당받았습니다. Let's Encrypt는 IP에 인증서를
+  발급하지 않으므로 **운영 HTTPS 프로필은 "미검증"이 아니라 "실행 불가"** 입니다.
+  실질적인 배포 모드는 개발 override를 붙인 HTTP 프로필이며, 그 결과 **로그인
+  자격증명·JWT·WebSocket ticket이 평문으로 전송됩니다.** 코드상의 TLS 강제와 인증서
+  fail-closed 설계는 그대로 유지하되, 이 환경에서는 그 경로를 쓰지 않을 뿐입니다.
+  완화책은 인바운드 소스를 사용 IP `/32`로 제한하는 것입니다(§4.3).
+- **보안 그룹 변경 권한 없음**: 인바운드 규칙 추가는 인프라 관리자 요청이 필요합니다.
+  포트를 여는 작업이 배포 절차의 외부 의존 단계로 남습니다.
 - **단일 프로세스 전제**: 마지막 활성 admin 보호와 셸 세션 한도(사용자당 1, 전체 5)는
   단일 백엔드 프로세스의 메모리·잠금 범위입니다. 다중 worker나 다중 인스턴스로
   확장하려면 공유 저장소나 DB 수준 직렬화가 추가로 필요합니다.
