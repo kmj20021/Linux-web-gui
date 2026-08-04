@@ -1,0 +1,80 @@
+{
+  "aggregates": {
+    "pure_llm": {
+      "contradiction_rate": 0.0,
+      "error_rate": 0.0,
+      "fallback_rate": 0.0,
+      "grade_agreement_rate": 1.0,
+      "input_tokens": 0,
+      "latency_ms_p50": 0.01,
+      "latency_ms_p95": 0.018,
+      "output_tokens": 0,
+      "parse_success_rate": 1.0,
+      "request_id_hash_loss_count": 0,
+      "request_id_presence_rate": 0.0,
+      "samples": 15,
+      "schema_validation_count": 0,
+      "successes": 15,
+      "transport_success_count": 0,
+      "valid_sample_count": 15
+    },
+    "structured_state": {
+      "contradiction_rate": 0.0,
+      "error_rate": 0.0,
+      "fallback_rate": 0.0,
+      "grade_agreement_rate": 1.0,
+      "input_tokens": 0,
+      "latency_ms_p50": 0.011,
+      "latency_ms_p95": 0.022,
+      "output_tokens": 0,
+      "parse_success_rate": 1.0,
+      "request_id_hash_loss_count": 0,
+      "request_id_presence_rate": 0.0,
+      "samples": 15,
+      "schema_validation_count": 0,
+      "successes": 15,
+      "transport_success_count": 0,
+      "valid_sample_count": 15
+    }
+  },
+  "api": "Converse",
+  "api_call_count": 30,
+  "cost": {
+    "currency": null,
+    "estimated_cost": null,
+    "formula": "input_tokens*input_price/1e6 + output_tokens*output_price/1e6",
+    "input_price_per_million": null,
+    "output_price_per_million": null
+  },
+  "environment_conditions": {
+    "max_api_calls": 40,
+    "operational_db_used": false,
+    "python": "3.12.3",
+    "sequential": true,
+    "target_successes": 30
+  },
+  "finished_at": "2026-07-22T08:45:39.344184+00:00",
+  "fixture_hash": "c645a76b33d68321ec220f18d22cd404100ed01232ab3a36e253d68f65dc9355",
+  "human_expert_hint_suitability": "not_evaluated",
+  "inference_profile": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "mode": "mock",
+  "prompt_hash": "254f5bb4bade47fccfa8e8c8a8d5b866b896236f8f44a9663e1bb51c7c9f200a",
+  "region": "us-east-1",
+  "request_id_hash_loss_count": 0,
+  "run_id": "stage10-2c5819736193",
+  "sample_count": 30,
+  "schema_hash": "f535d0f1a8cb41d6de9c158654f7ad3dfd395a1fa3ac2bbcfad410456409f4aa",
+  "schema_validation_count": 0,
+  "schema_version": "1.0",
+  "started_at": "2026-07-22T08:45:39.331730+00:00",
+  "state_rule_benchmark": {
+    "determinism_rate": 1.0,
+    "isolation_mix_count": 0,
+    "latency_ms_p50": 0.065,
+    "latency_ms_p95": 0.087,
+    "samples": 300
+  },
+  "target_successes_reached": true,
+  "transport_success_count": 0,
+  "valid_sample_count": 30
+}

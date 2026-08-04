@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "prompt_version": "stage10-v1",
+  "cases": [
+    {"case_id":"service-01","scenario_key":"service_recovery","task_key":"service_recovery_01","expected_grade":"failure"},
+    {"case_id":"service-02","scenario_key":"service_recovery","task_key":"service_recovery_02","expected_grade":"failure"},
+    {"case_id":"account-01","scenario_key":"account_permissions","task_key":"account_permissions_01","expected_grade":"failure"},
+    {"case_id":"account-02","scenario_key":"account_permissions","task_key":"account_permissions_02","expected_grade":"failure"},
+    {"case_id":"remote-01","scenario_key":"remote_access_recovery","task_key":"remote_access_recovery_01","expected_grade":"failure"},
+    {"case_id":"remote-02","scenario_key":"remote_access_recovery","task_key":"remote_access_recovery_02","expected_grade":"failure"}
+  ]
+}

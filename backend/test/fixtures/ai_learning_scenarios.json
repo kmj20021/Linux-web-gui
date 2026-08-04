@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "execution_policy": {
+    "mode": "simulation_only",
+    "execute_on_host_or_docker": false,
+    "grading_principle": "final_state_first",
+    "grading_note": "명령 문자열의 일치 여부보다 목표 최종 상태 충족 여부를 우선 채점한다."
+  },
+  "supported_commands": [
+    "systemctl status|start|stop|restart|enable|disable",
+    "useradd|userdel|usermod|passwd",
+    "chmod|chown|ls|cat",
+    "ufw allow|deny|status",
+    "ss|curl|ping",
+    "apt install|remove"
+  ],
+  "rejected_shell_syntax": [
+    {"syntax": ";", "expected_result": "unsupported_syntax", "state_change": false},
+    {"syntax": "&&", "expected_result": "unsupported_syntax", "state_change": false},
+    {"syntax": "||", "expected_result": "unsupported_syntax", "state_change": false},
+    {"syntax": "|", "expected_result": "unsupported_syntax", "state_change": false},
+    {"syntax": "$(command)", "expected_result": "unsupported_syntax", "state_change": false},
+    {"syntax": "`command`", "expected_result": "unsupported_syntax", "state_change": false},
+    {"syntax": ">, >>, <, 2>", "expected_result": "unsupported_syntax", "state_change": false},
+    {"syntax": "arbitrary shell script", "expected_result": "unsupported_syntax", "state_change": false}
+  ],
+  "scenarios": [
+    {
+      "scenario_id": "service_recovery",
+      "title": "Nginx 서비스 장애 복구",
+      "learning_goal": "systemd 서비스 상태를 진단하고 안전하게 복구한다.",
+      "problems": [
+        {
+          "problem_id": "service_recovery_01",
+          "title": "중지된 Nginx 시작",
+          "initial_state": {"services": {"nginx": {"active": false, "enabled": false}}, "packages": {"nginx": "installed"}},
+          "goal_state": {"services": {"nginx": {"active": true}}},
+          "grading": {
+            "success": {"required_state": {"services.nginx.active": true}, "description": "nginx가 active이면 성공"},
+            "partial": {"required_state": {"services.nginx.enabled": true, "services.nginx.active": false}, "description": "자동 시작만 설정하고 현재 서비스는 중지 상태이면 부분 성공"},
+            "failure": {"required_state": {"services.nginx.active": false, "services.nginx.enabled": false}, "description": "초기 장애 상태가 유지되거나 관련 없는 상태만 바뀌면 실패"}
+          },
+          "hints": [
+            {"level": 1, "kind": "concept", "text": "설치 여부와 현재 서비스 상태를 먼저 확인합니다."},
+            {"level": 2, "kind": "command_family", "text": "systemctl status와 start 계열을 사용합니다."},
+            {"level": 3, "kind": "syntax", "text": "systemctl start nginx"}
+          ],
+          "answer_examples": {
+            "correct": {"commands": ["systemctl start nginx"], "expected_grade": "success"},
+            "partial": {"commands": ["systemctl enable nginx"], "expected_grade": "partial"},
+            "incorrect": {"commands": ["systemctl stop nginx"], "expected_grade": "failure"},
+            "alternative": {"commands": ["systemctl restart nginx"], "expected_grade": "success"}
+          },
+          "execution_mode": "simulation_only",
+          "steps": [
+            {"step": 1, "command": "systemctl status nginx", "expected_result": "inactive", "state_change": false, "state_before": {"services": {"nginx": {"active": false, "enabled": false}}, "packages": {"nginx": "installed"}}, "state_after": {"services": {"nginx": {"active": false, "enabled": false}}, "packages": {"nginx": "installed"}}},
+            {"step": 2, "command": "systemctl start nginx", "expected_result": "started", "state_change": true, "state_before": {"services": {"nginx": {"active": false, "enabled": false}}, "packages": {"nginx": "installed"}}, "state_after": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}},
+            {"step": 3, "command": "systemctl status nginx", "expected_result": "active", "state_change": false, "state_before": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}, "state_after": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}},
+            {"step": 4, "command": "curl http://localhost", "expected_result": "reachable", "state_change": false, "state_before": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}, "state_after": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}}
+          ],
+          "expected_final_state": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}
+        },
+        {
+          "problem_id": "service_recovery_02",
+          "title": "Nginx 재부팅 후 자동 시작 설정",
+          "initial_state": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}},
+          "goal_state": {"services": {"nginx": {"active": true, "enabled": true}}},
+          "grading": {
+            "success": {"required_state": {"services.nginx.active": true, "services.nginx.enabled": true}, "description": "실행 중이며 자동 시작이 설정되면 성공"},
+            "partial": {"required_state": {"services.nginx.active": true, "services.nginx.enabled": false}, "description": "현재 실행만 유지되고 자동 시작이 없으면 부분 성공"},
+            "failure": {"required_state": {"services.nginx.active": false}, "description": "서비스가 중지되면 실패"}
+          },
+          "hints": [
+            {"level": 1, "kind": "concept", "text": "현재 실행 상태와 부팅 시 자동 시작은 서로 다른 상태입니다."},
+            {"level": 2, "kind": "command_family", "text": "systemctl enable 계열을 사용합니다."},
+            {"level": 3, "kind": "syntax", "text": "systemctl enable nginx"}
+          ],
+          "answer_examples": {
+            "correct": {"commands": ["systemctl enable nginx"], "expected_grade": "success"},
+            "partial": {"commands": ["systemctl restart nginx"], "expected_grade": "partial"},
+            "incorrect": {"commands": ["systemctl disable nginx", "systemctl stop nginx"], "expected_grade": "failure"},
+            "alternative": {"commands": ["systemctl enable nginx", "systemctl restart nginx"], "expected_grade": "success"}
+          },
+          "execution_mode": "simulation_only",
+          "steps": [
+            {"step": 5, "command": "systemctl status nginx", "expected_result": "active", "state_change": false, "state_before": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}, "state_after": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}},
+            {"step": 6, "command": "systemctl enable nginx", "expected_result": "enabled", "state_change": true, "state_before": {"services": {"nginx": {"active": true, "enabled": false}}, "packages": {"nginx": "installed"}}, "state_after": {"services": {"nginx": {"active": true, "enabled": true}}, "packages": {"nginx": "installed"}}},
+            {"step": 7, "command": "systemctl restart nginx", "expected_result": "restarted", "state_change": true, "state_before": {"services": {"nginx": {"active": true, "enabled": true}}, "packages": {"nginx": "installed"}}, "state_after": {"services": {"nginx": {"active": true, "enabled": true}}, "packages": {"nginx": "installed"}}},
+            {"step": 8, "command": "systemctl status nginx", "expected_result": "active; enabled", "state_change": false, "state_before": {"services": {"nginx": {"active": true, "enabled": true}}, "packages": {"nginx": "installed"}}, "state_after": {"services": {"nginx": {"active": true, "enabled": true}}, "packages": {"nginx": "installed"}}}
+          ],
+          "expected_final_state": {"services": {"nginx": {"active": true, "enabled": true}}, "packages": {"nginx": "installed"}}
+        }
+      ]
+    },
+    {
+      "scenario_id": "account_permissions",
+      "title": "운영 계정과 파일 권한 구성",
+      "learning_goal": "사용자를 만들고 소유권과 최소 파일 권한을 설정한다.",
+      "problems": [
+        {
+          "problem_id": "account_permissions_01",
+          "title": "배포 사용자 생성",
+          "initial_state": {"users": {}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}},
+          "goal_state": {"users": {"deploy": {"exists": true}}},
+          "grading": {
+            "success": {"required_state": {"users.deploy.exists": true}, "description": "deploy 사용자가 존재하면 성공"},
+            "partial": {"required_state": {"users.deploy.exists": false}, "observed_command_family": "useradd", "description": "사용자 생성 계열을 시도했지만 대상이 다르면 부분 성공"},
+            "failure": {"required_state": {"users.deploy.exists": false}, "description": "deploy 사용자가 없고 관련 시도도 없으면 실패"}
+          },
+          "hints": [
+            {"level": 1, "kind": "concept", "text": "파일 소유권을 바꾸기 전에 대상 계정이 존재해야 합니다."},
+            {"level": 2, "kind": "command_family", "text": "useradd 계열을 사용합니다."},
+            {"level": 3, "kind": "syntax", "text": "useradd deploy"}
+          ],
+          "answer_examples": {
+            "correct": {"commands": ["useradd deploy"], "expected_grade": "success"},
+            "partial": {"commands": ["useradd operator"], "expected_grade": "partial"},
+            "incorrect": {"commands": ["userdel deploy"], "expected_grade": "failure"},
+            "alternative": {"commands": ["useradd deploy", "passwd deploy"], "expected_grade": "success"}
+          },
+          "execution_mode": "simulation_only",
+          "steps": [
+            {"step": 9, "command": "ls /srv/app/config.ini", "expected_result": "root root 644", "state_change": false, "state_before": {"users": {}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}, "state_after": {"users": {}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}},
+            {"step": 10, "command": "useradd deploy", "expected_result": "user created", "state_change": true, "state_before": {"users": {}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}, "state_after": {"users": {"deploy": {"exists": true, "password_configured": false}}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}},
+            {"step": 11, "command": "passwd deploy", "expected_result": "password marked configured", "state_change": true, "state_before": {"users": {"deploy": {"exists": true, "password_configured": false}}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}, "state_after": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}},
+            {"step": 12, "command": "ls /srv/app/config.ini", "expected_result": "root root 644", "state_change": false, "state_before": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}, "state_after": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}}
+          ],
+          "expected_final_state": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}
+        },
+        {
+          "problem_id": "account_permissions_02",
+          "title": "설정 파일 소유권과 권한 제한",
+          "initial_state": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}},
+          "goal_state": {"files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "640"}}},
+          "grading": {
+            "success": {"required_state": {"files./srv/app/config.ini.owner": "deploy", "files./srv/app/config.ini.group": "deploy", "files./srv/app/config.ini.mode": "640"}, "description": "소유권과 mode가 모두 목표와 같으면 성공"},
+            "partial": {"any_required_state": [{"files./srv/app/config.ini.owner": "deploy"}, {"files./srv/app/config.ini.mode": "640"}], "description": "소유권 또는 mode 중 하나만 맞으면 부분 성공"},
+            "failure": {"required_state": {"files./srv/app/config.ini.owner": "root", "files./srv/app/config.ini.mode": "644"}, "description": "초기 권한이 유지되거나 더 넓어지면 실패"}
+          },
+          "hints": [
+            {"level": 1, "kind": "concept", "text": "소유자 변경과 읽기·쓰기 권한 변경을 각각 확인합니다."},
+            {"level": 2, "kind": "command_family", "text": "chown과 chmod 계열을 사용합니다."},
+            {"level": 3, "kind": "syntax", "text": "chown deploy:deploy /srv/app/config.ini 후 chmod 640 /srv/app/config.ini"}
+          ],
+          "answer_examples": {
+            "correct": {"commands": ["chown deploy:deploy /srv/app/config.ini", "chmod 640 /srv/app/config.ini"], "expected_grade": "success"},
+            "partial": {"commands": ["chmod 640 /srv/app/config.ini"], "expected_grade": "partial"},
+            "incorrect": {"commands": ["chmod 777 /srv/app/config.ini"], "expected_grade": "failure"},
+            "alternative": {"commands": ["chmod 640 /srv/app/config.ini", "chown deploy:deploy /srv/app/config.ini"], "expected_grade": "success"}
+          },
+          "execution_mode": "simulation_only",
+          "steps": [
+            {"step": 13, "command": "chown deploy:deploy /srv/app/config.ini", "expected_result": "owner changed", "state_change": true, "state_before": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "root", "group": "root", "mode": "644"}}}, "state_after": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "644"}}}},
+            {"step": 14, "command": "chmod 640 /srv/app/config.ini", "expected_result": "mode changed", "state_change": true, "state_before": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "644"}}}, "state_after": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "640"}}}},
+            {"step": 15, "command": "ls /srv/app/config.ini", "expected_result": "deploy deploy 640", "state_change": false, "state_before": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "640"}}}, "state_after": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "640"}}}},
+            {"step": 16, "command": "cat /srv/app/config.ini", "expected_result": "read allowed by simulated policy", "state_change": false, "state_before": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "640"}}}, "state_after": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "640"}}}}
+          ],
+          "expected_final_state": {"users": {"deploy": {"exists": true, "password_configured": true}}, "files": {"/srv/app/config.ini": {"owner": "deploy", "group": "deploy", "mode": "640"}}}
+        }
+      ]
+    },
+    {
+      "scenario_id": "remote_access_recovery",
+      "title": "방화벽과 원격 접속 장애",
+      "learning_goal": "SSH 열린 포트와 방화벽 규칙을 확인하고 원격 접속 차단 위험을 안전하게 복구한다.",
+      "problems": [
+        {
+          "problem_id": "remote_access_recovery_01",
+          "title": "SSH 포트 차단 원인 진단",
+          "initial_state": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked"},
+          "goal_state": {"diagnosis": {"ssh_listening": true, "firewall_blocks_22": true, "cause": "firewall_rule"}},
+          "grading": {
+            "success": {"required_state": {"diagnosis.ssh_listening": true, "diagnosis.firewall_blocks_22": true, "diagnosis.cause": "firewall_rule"}, "description": "SSH가 열려 있으나 방화벽이 22번 포트를 차단한 원인을 확인하면 성공"},
+            "partial": {"any_required_state": [{"diagnosis.ssh_listening": true}, {"diagnosis.firewall_blocks_22": true}], "description": "열린 포트나 방화벽 규칙 중 하나만 확인하면 부분 성공"},
+            "failure": {"required_state": {"diagnosis": {}}, "description": "서비스를 중지하거나 원인을 확인하지 못하면 실패"}
+          },
+          "hints": [
+            {"level": 1, "kind": "concept", "text": "원격 접속 장애에서는 서비스의 listen 상태와 방화벽 규칙을 분리해 확인합니다."},
+            {"level": 2, "kind": "command_family", "text": "ss와 ufw status 계열을 사용합니다."},
+            {"level": 3, "kind": "syntax", "text": "ss 후 ufw status"}
+          ],
+          "answer_examples": {
+            "correct": {"commands": ["ss", "ufw status", "ping training-server"], "expected_grade": "success"},
+            "partial": {"commands": ["ss"], "expected_grade": "partial"},
+            "incorrect": {"commands": ["systemctl stop ssh"], "expected_grade": "failure"},
+            "alternative": {"commands": ["ufw status", "ss", "ping training-server"], "expected_grade": "success"}
+          },
+          "execution_mode": "simulation_only",
+          "steps": [
+            {"step": 17, "command": "systemctl status ssh", "expected_result": "active", "state_change": false, "state_before": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked"}, "state_after": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked"}},
+            {"step": 18, "command": "ss", "expected_result": "port 22 listening", "state_change": true, "state_before": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked"}, "state_after": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true}}},
+            {"step": 19, "command": "ufw status", "expected_result": "22/tcp deny", "state_change": true, "state_before": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true}}, "state_after": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": true}}},
+            {"step": 20, "command": "ping training-server", "expected_result": "host reachable; SSH still blocked", "state_change": true, "state_before": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": true}}, "state_after": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": true, "cause": "firewall_rule"}}}
+          ],
+          "expected_final_state": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": true, "cause": "firewall_rule"}}
+        },
+        {
+          "problem_id": "remote_access_recovery_02",
+          "title": "SSH 방화벽 규칙 복구",
+          "initial_state": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": true, "cause": "firewall_rule"}},
+          "goal_state": {"firewall": {"22/tcp": "allow"}, "services": {"ssh": {"active": true}}, "remote_access": "available"},
+          "grading": {
+            "success": {"required_state": {"firewall.22/tcp": "allow", "services.ssh.active": true, "remote_access": "available"}, "description": "SSH 서비스가 실행 중이고 22번 포트가 허용되어 원격 접속이 복구되면 성공"},
+            "partial": {"required_state": {"firewall.22/tcp": "allow", "services.ssh.active": false}, "description": "방화벽만 허용하고 SSH 서비스를 중지하면 부분 성공"},
+            "failure": {"required_state": {"firewall.22/tcp": "deny", "remote_access": "blocked"}, "description": "원격 접속 차단이 유지되면 실패"}
+          },
+          "hints": [
+            {"level": 1, "kind": "concept", "text": "원격 서버의 SSH 포트를 차단하면 관리 접속도 끊길 수 있으므로 현재 규칙을 확인한 뒤 복구합니다."},
+            {"level": 2, "kind": "command_family", "text": "ufw allow와 status, ss 계열을 사용합니다."},
+            {"level": 3, "kind": "syntax", "text": "ufw allow 22/tcp"}
+          ],
+          "answer_examples": {
+            "correct": {"commands": ["ufw allow 22/tcp"], "expected_grade": "success"},
+            "partial": {"commands": ["ufw allow 22/tcp", "systemctl stop ssh"], "expected_grade": "partial"},
+            "incorrect": {"commands": ["ufw deny 22/tcp"], "expected_grade": "failure"},
+            "alternative": {"commands": ["ufw allow 22", "systemctl restart ssh"], "expected_grade": "success"}
+          },
+          "execution_mode": "simulation_only",
+          "steps": [
+            {"step": 21, "command": "ufw status", "expected_result": "22/tcp deny", "state_change": false, "state_before": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": true, "cause": "firewall_rule"}}, "state_after": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": true, "cause": "firewall_rule"}}},
+            {"step": 22, "command": "ufw allow 22/tcp", "expected_result": "rule updated; remote access available", "state_change": true, "state_before": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "deny"}, "remote_access": "blocked", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": true, "cause": "firewall_rule"}}, "state_after": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "allow"}, "remote_access": "available", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": false, "cause": "firewall_rule"}}},
+            {"step": 23, "command": "ss", "expected_result": "port 22 listening", "state_change": false, "state_before": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "allow"}, "remote_access": "available", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": false, "cause": "firewall_rule"}}, "state_after": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "allow"}, "remote_access": "available", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": false, "cause": "firewall_rule"}}},
+            {"step": 24, "command": "ufw status", "expected_result": "22/tcp allow", "state_change": false, "state_before": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "allow"}, "remote_access": "available", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": false, "cause": "firewall_rule"}}, "state_after": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "allow"}, "remote_access": "available", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": false, "cause": "firewall_rule"}}}
+          ],
+          "expected_final_state": {"services": {"ssh": {"active": true}}, "listening_ports": [22], "firewall": {"22/tcp": "allow"}, "remote_access": "available", "diagnosis": {"ssh_listening": true, "firewall_blocks_22": false, "cause": "firewall_rule"}}
+        }
+      ]
+    }
+  ]
+}
