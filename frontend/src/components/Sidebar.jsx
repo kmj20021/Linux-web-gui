@@ -28,9 +28,9 @@ function Sidebar() {
       label: '시스템',
       items: [
         { path: '/filesystem', label: '파일시스템', icon: filesystemIcon() },
+        { path: '/terminal', label: '터미널', icon: terminalIcon() },
         ...(isAdmin ? [
           { path: '/users', label: '사용자 관리', icon: usersIcon() },
-          { path: '/terminal', label: '터미널', icon: terminalIcon() },
         ] : []),
       ]
     },

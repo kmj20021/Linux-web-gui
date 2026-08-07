@@ -105,7 +105,7 @@ def _request(app: FastAPI, url: str) -> httpx.Response:
     return asyncio.run(send_request())
 
 
-def test_route_requires_admin_and_preserves_session_semantics(monkeypatch, tmp_path: Path) -> None:
+def test_route_requires_auth_and_preserves_session_semantics(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(shell, 'WEBTERM_HOME', tmp_path)
     monkeypatch.setattr(shell, 'ACTIVE_SESSIONS', {})
     monkeypatch.setattr(shell, 'USER_LATEST_SESSION', {})
@@ -116,31 +116,25 @@ def test_route_requires_admin_and_preserves_session_semantics(monkeypatch, tmp_p
     app = FastAPI()
     app.include_router(shell.router)
 
-    async def unauthorized_admin():
+    async def unauthorized_user():
         raise HTTPException(status_code=401, detail='Could not validate credentials')
 
-    app.dependency_overrides[shell.get_current_admin] = unauthorized_admin
+    app.dependency_overrides[shell.get_current_user] = unauthorized_user
     assert _request(app, '/api/shell/fs?session_id=known').status_code == 401
 
-    async def viewer_admin():
-        raise HTTPException(status_code=403, detail='Admin privileges required')
+    async def owner_viewer():
+        return types.SimpleNamespace(username='owner', role='viewer', is_active=True)
 
-    app.dependency_overrides[shell.get_current_admin] = viewer_admin
-    assert _request(app, '/api/shell/fs?session_id=known').status_code == 403
-
-    async def owner_admin():
-        return types.SimpleNamespace(username='owner', role='admin', is_active=True)
-
-    app.dependency_overrides[shell.get_current_admin] = owner_admin
+    app.dependency_overrides[shell.get_current_user] = owner_viewer
     assert _request(app, '/api/shell/fs?session_id=missing').status_code == 404
 
-    async def other_admin():
-        return types.SimpleNamespace(username='other', role='admin', is_active=True)
+    async def other_viewer():
+        return types.SimpleNamespace(username='other', role='viewer', is_active=True)
 
-    app.dependency_overrides[shell.get_current_admin] = other_admin
+    app.dependency_overrides[shell.get_current_user] = other_viewer
     assert _request(app, '/api/shell/fs?session_id=known').status_code == 403
 
-    app.dependency_overrides[shell.get_current_admin] = owner_admin
+    app.dependency_overrides[shell.get_current_user] = owner_viewer
     response = _request(app, '/api/shell/fs?session_id=known')
     assert response.status_code == 200
     assert response.json()['tree']['children'] == [

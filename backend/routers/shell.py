@@ -27,7 +27,7 @@ from starlette.websockets import WebSocketState
 
 from core.database import AsyncSessionLocal
 from core.models import WebUser
-from core.security import consume_ws_ticket, get_current_admin
+from core.security import consume_ws_ticket, get_current_user
 from services.file_tree import FileTreeError, build_lazy_tree
 from sqlalchemy import select
 
@@ -245,13 +245,15 @@ async def websocket_shell(websocket: WebSocket):
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(WebUser).where(WebUser.username == username))
         user = result.scalar_one_or_none()
-    if user is None or not user.is_active or user.role != 'admin':
+    # 셸은 admin 전용이 아니라 인증된 사용자(admin·viewer) 모두 허용한다
+    # (OUT_OF_PLAN_CHANGE 2026-08-07). 비활성 사용자만 여기서 재확인해 거부한다.
+    if user is None or not user.is_active:
         await websocket.close(code=4003, reason='Unauthorized')
         return
 
     session_id = _create_session_id(username)
     session = DockerSession(session_id=session_id, username=username)
-    logger.info('shell_ws result=%s', 'opened')
+    logger.info('shell_ws user=%s result=%s', username, 'opened')
 
     # 초기 메타데이터 전송
     await websocket.send_json({
@@ -263,7 +265,7 @@ async def websocket_shell(websocket: WebSocket):
 
     capacity_error = _session_capacity_error(username)
     if capacity_error is not None:
-        logger.info('shell_ws result=%s', 'capacity_rejected')
+        logger.info('shell_ws user=%s result=%s', username, 'capacity_rejected')
         await websocket.send_json({'type': 'data', 'data': f'\r\n{capacity_error}.\r\n'})
         await websocket.close(code=1013, reason='Shell capacity reached')
         return
@@ -271,7 +273,7 @@ async def websocket_shell(websocket: WebSocket):
     try:
         master_fd = await session.start_async(80, 24)
     except Exception:
-        logger.error('shell_ws result=%s', 'container_start_failed')
+        logger.error('shell_ws user=%s result=%s', username, 'container_start_failed')
         await session.cleanup_async()
         await websocket.send_json({
             'type': 'data',
@@ -282,7 +284,7 @@ async def websocket_shell(websocket: WebSocket):
 
     ACTIVE_SESSIONS[session_id] = session
     USER_LATEST_SESSION[username] = session_id
-    logger.info('shell_ws result=%s', 'started')
+    logger.info('shell_ws user=%s result=%s', username, 'started')
 
     loop = asyncio.get_event_loop()
     read_queue: asyncio.Queue = asyncio.Queue()
@@ -351,7 +353,7 @@ async def websocket_shell(websocket: WebSocket):
             except WebSocketDisconnect:
                 break
             except Exception:
-                logger.error('shell_ws result=%s', 'read_failed')
+                logger.error('shell_ws user=%s result=%s', username, 'read_failed')
                 break
 
     try:
@@ -367,7 +369,7 @@ async def websocket_shell(websocket: WebSocket):
             except asyncio.CancelledError:
                 pass
     except Exception:
-        logger.error('shell_ws result=%s', 'unexpected_error')
+        logger.error('shell_ws user=%s result=%s', username, 'unexpected_error')
     finally:
         # PERF-02: 취소·timeout 로 offload 정리가 중단돼도 cleanup 은 멱등하므로
         # 정확히 한 번만 실행된다. shield 로 정리 자체는 취소로부터 보호한다.
@@ -384,16 +386,16 @@ async def websocket_shell(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
-        logger.info('shell_ws result=%s', 'closed')
+        logger.info('shell_ws user=%s result=%s', username, 'closed')
 
 
 @router.get('/api/shell/fs')
 async def get_shell_filesystem(
     session_id: Optional[str] = Query(None),
     path: str = Query('/home/user'),
-    current_admin: WebUser = Depends(get_current_admin),
+    current_user: WebUser = Depends(get_current_user),
 ):
-    username = current_admin.username
+    username = current_user.username
 
     sid = session_id or USER_LATEST_SESSION.get(username)
     if not sid:
@@ -427,11 +429,11 @@ async def get_shell_filesystem(
 
 @router.get('/api/shell/sessions')
 async def list_shell_sessions(
-    current_admin: WebUser = Depends(get_current_admin),
+    current_user: WebUser = Depends(get_current_user),
 ):
-    # 셸은 admin 전용이므로 세션 조회도 같은 기준을 쓴다. get_current_admin 은
-    # 서명만 보는 게 아니라 DB 에서 사용자 활성 상태와 현재 역할을 재확인한다.
-    username = current_admin.username
+    # 셸은 인증된 사용자(admin·viewer) 모두 허용한다. get_current_user 는
+    # 서명만 보는 게 아니라 DB 에서 사용자 활성 상태를 재확인한다.
+    username = current_user.username
     sessions = [
         {'session_id': sid, 'cwd': s.cwd, 'user': 'user'}
         for sid, s in ACTIVE_SESSIONS.items()
@@ -442,11 +444,12 @@ async def list_shell_sessions(
 
 @router.delete('/api/shell/reset')
 async def reset_shell_home(
-    current_admin: WebUser = Depends(get_current_admin),
+    current_user: WebUser = Depends(get_current_user),
 ):
-    # 홈 초기화는 파일을 지우는 동작이므로 viewer 와 비활성 사용자를 서버에서 막는다
-    # (BASE-02 "셸 파일 탐색·초기화": 미인증 401, viewer 403, 본인 세션만 허용).
-    username = current_admin.username
+    # 홈 초기화는 파일을 지우는 동작이므로 비활성 사용자를 서버에서 막는다. 인증된
+    # 사용자(admin·viewer)는 모두 허용하되 본인 홈 디렉터리만 건드릴 수 있다
+    # (OUT_OF_PLAN_CHANGE 2026-08-07: 셸을 일반 사용자에게 개방).
+    username = current_user.username
 
     # 활성 세션이 있으면 정리 후 진행
     sids_to_remove = [

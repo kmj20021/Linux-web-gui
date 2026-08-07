@@ -3,7 +3,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 if sys.platform == "win32" and "fcntl" not in sys.modules:
@@ -27,19 +27,13 @@ def _user(role="viewer", active=True):
     return SimpleNamespace(username="test_user", role=role, is_active=active)
 
 
-def _ticket_client(user=None, admin=None):
+def _ticket_client(user=None):
     app = FastAPI()
     app.include_router(auth.router, prefix="/api")
     if user is not None:
         async def current_user():
             return user
         app.dependency_overrides[auth.get_current_user] = current_user
-    if admin is not None:
-        async def current_admin():
-            if isinstance(admin, Exception):
-                raise admin
-            return admin
-        app.dependency_overrides[auth.get_current_admin] = current_admin
     return TestClient(app)
 
 
@@ -52,11 +46,14 @@ def test_ticket_endpoints_enforce_roles_and_no_store():
     assert monitor.json()["expires_in_seconds"] == 60
     assert monitor.json()["ticket"]
 
-    forbidden = HTTPException(status_code=403, detail="Admin privileges required")
-    assert _ticket_client(user=viewer, admin=forbidden).post(
-        "/api/auth/ws-tickets/shell"
-    ).status_code == 403
-    shell_response = _ticket_client(user=_user("admin"), admin=_user("admin")).post(
+    # 셸 ticket 발급은 admin 전용이 아니라 인증된 사용자(admin·viewer) 모두 허용한다
+    # (OUT_OF_PLAN_CHANGE 2026-08-07: 셸을 일반 사용자에게 개방).
+    assert _ticket_client().post("/api/auth/ws-tickets/shell").status_code == 401
+    viewer_shell = _ticket_client(user=viewer).post("/api/auth/ws-tickets/shell")
+    assert viewer_shell.status_code == 200
+    assert 0 < viewer_shell.json()["expires_in_seconds"] <= 60
+
+    shell_response = _ticket_client(user=_user("admin")).post(
         "/api/auth/ws-tickets/shell"
     )
     assert shell_response.status_code == 200
@@ -131,17 +128,43 @@ async def test_monitor_rechecks_active_user_after_consuming_ticket(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_shell_rechecks_current_admin_role_and_rejects_url_credentials(monkeypatch):
+async def test_shell_rejects_url_credentials(monkeypatch):
     query_ws = _WebSocket(b"token=synthetic-sensitive-value")
     await shell.websocket_shell(query_ws)
     assert query_ws.close_code == 4001
 
-    role_changed_ws = _WebSocket()
+
+@pytest.mark.asyncio
+async def test_shell_allows_viewer_role_after_reauth(monkeypatch):
+    """셸은 admin 전용이 아니므로, 재확인된 role 이 viewer 여도 4003 으로 막지 않는다.
+
+    (OUT_OF_PLAN_CHANGE 2026-08-07: 셸을 일반 사용자에게 개방. 남은 서버 측 강제는
+    비활성 사용자 재확인뿐이며, 아래 테스트가 그 경계를 커버한다.)
+    """
+    viewer_ws = _WebSocket()
     monkeypatch.setattr(shell, "AsyncSessionLocal", lambda: _Session(_user("viewer")))
     monkeypatch.setattr(shell, "consume_ws_ticket", lambda *_args: _value("test_user"))
-    await shell.websocket_shell(role_changed_ws)
-    assert role_changed_ws.accepted
-    assert role_changed_ws.close_code == 4003
+
+    async def _fail_start(*_args, **_kwargs):
+        raise RuntimeError("no docker in unit test")
+
+    monkeypatch.setattr(shell.DockerSession, "start_async", _fail_start)
+    await shell.websocket_shell(viewer_ws)
+    assert viewer_ws.accepted
+    # role 검사를 통과해 컨테이너 기동까지 도달했고, 기동 실패 경로(1011)로 닫혔다.
+    assert viewer_ws.close_code == 1011
+
+
+@pytest.mark.asyncio
+async def test_shell_rechecks_active_status_and_rejects_deactivated_user(monkeypatch):
+    deactivated_ws = _WebSocket()
+    monkeypatch.setattr(
+        shell, "AsyncSessionLocal", lambda: _Session(_user("admin", active=False))
+    )
+    monkeypatch.setattr(shell, "consume_ws_ticket", lambda *_args: _value("test_user"))
+    await shell.websocket_shell(deactivated_ws)
+    assert deactivated_ws.accepted
+    assert deactivated_ws.close_code == 4003
 
 
 async def _value(value):

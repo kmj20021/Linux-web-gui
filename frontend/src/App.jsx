@@ -135,7 +135,7 @@ function App() {
           <Route
             path="/terminal"
             element={
-              <ProtectedRoute requiredRole="admin">
+              <ProtectedRoute>
                 <Layout>
                   <Terminal />
                 </Layout>

@@ -145,6 +145,11 @@ flowchart TD
 | 셸 WebSocket ticket 발급 | 401 | 403 | 허용 |
 | 셸 파일 탐색·초기화 | 401 | 403 | 본인 세션만 허용 |
 
+> 위 두 셸 행은 Phase 0 당시 확정값이다. OUT_OF_PLAN_CHANGE(2026-08-07)로 셸이
+> admin 전용에서 인증된 전체 사용자(admin·viewer, 본인 세션만)로 개방됐다. 현재
+> 목표 계약은 `docs/contracts/security-contract.md` §2, 결정 근거는
+> `docs/re-progress.md`를 따른다.
+
 완료 조건:
 
 - 이후 백엔드와 프론트엔드가 참조할 단일 권한 계약이 존재한다.
@@ -409,12 +414,16 @@ flowchart TD
 1. REST Bearer 인증으로 용도별 ticket을 발급한다.
 2. ticket은 60초 이하, 1회 사용, 목적이 `monitor` 또는 `shell`로 고정된다.
 3. WebSocket 연결 시 DB에서 사용자의 활성 상태와 현재 role을 확인한다.
-4. 셸 ticket은 admin에게만 발급한다.
+4. ~~셸 ticket은 admin에게만 발급한다.~~ OUT_OF_PLAN_CHANGE(2026-08-07)로 인증된
+   전체 사용자(admin·viewer)에게 발급하도록 개방됐다. 비활성 사용자만 거부한다.
+   현재 기준은 `docs/contracts/security-contract.md` §2·§3.
 5. ticket은 로그에 남지 않으며 재사용할 수 없다.
 
-완료 조건:
+완료 조건 (Phase 3 당시):
 
-- 만료, 재사용, 목적 불일치, 비활성 사용자 및 viewer 셸 연결이 거부된다.
+- 만료, 재사용, 목적 불일치, 비활성 사용자 및 viewer 셸 연결이 거부된다. (viewer
+  셸 연결 거부는 위 OUT_OF_PLAN_CHANGE로 더 이상 유효하지 않음 — 비활성 사용자
+  거부만 현재도 유효)
 - 프론트엔드가 access token을 WebSocket URL에 넣지 않는다.
 
 ### Wave 3C

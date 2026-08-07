@@ -20,7 +20,6 @@ from core.models import LoginLog, WebUser
 from core.security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
-    get_current_admin,
     get_current_user,
     get_password_hash,
     issue_ws_ticket,
@@ -206,7 +205,7 @@ async def issue_monitor_ws_ticket(
 @router.post("/ws-tickets/shell", response_model=WebSocketTicketResponse)
 async def issue_shell_ws_ticket(
     response: Response,
-    current_user: WebUser = Depends(get_current_admin),
+    current_user: WebUser = Depends(get_current_user),
 ) -> WebSocketTicketResponse:
     return await _issue_ticket_response(response, current_user, "shell")
 

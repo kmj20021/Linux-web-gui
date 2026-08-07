@@ -116,13 +116,13 @@ MATRIX = (
     ),
     # 7. 모니터링 ticket 발급 (DEC-04)
     Row("모니터링 ticket", "POST", "/api/auth/ws-tickets/monitor", ALLOW, ALLOW),
-    # 8. 셸 ticket 발급 — 셸은 admin 전용
-    Row("셸 ticket", "POST", "/api/auth/ws-tickets/shell", status.HTTP_403_FORBIDDEN, ALLOW),
-    # 9. 셸 파일 탐색·초기화
-    Row("셸 파일 탐색", "GET", "/api/shell/fs", status.HTTP_403_FORBIDDEN, ALLOW),
-    Row("셸 초기화", "DELETE", "/api/shell/reset", status.HTTP_403_FORBIDDEN, ALLOW),
+    # 8. 셸 ticket 발급 — 인증된 사용자(admin·viewer) 모두 허용
+    Row("셸 ticket", "POST", "/api/auth/ws-tickets/shell", ALLOW, ALLOW),
+    # 9. 셸 파일 탐색·초기화 — 인증된 사용자(admin·viewer) 모두 허용, 본인 세션만
+    Row("셸 파일 탐색", "GET", "/api/shell/fs", ALLOW, ALLOW),
+    Row("셸 초기화", "DELETE", "/api/shell/reset", ALLOW, ALLOW),
     # 10. 셸 세션 목록
-    Row("셸 세션 목록", "GET", "/api/shell/sessions", status.HTTP_403_FORBIDDEN, ALLOW),
+    Row("셸 세션 목록", "GET", "/api/shell/sessions", ALLOW, ALLOW),
 )
 
 
