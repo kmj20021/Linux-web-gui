@@ -166,7 +166,7 @@ class LoginLog(Base):
 
 class AILearningSession(Base):
     """
-    AI 리눅스 학습 세션 (docs/ai-plan.md)
+    AI 리눅스 학습 세션 (시나리오·채점 규칙은 docs/ai-learning-scenarios.md)
 
     - user_id: 세션 소유자 (WebUser)
     - mode: "docker" | "simulation" (MVP는 simulation만 실제 실행 지원)

@@ -5,7 +5,7 @@ Revision ID: 0002
 Revises: 0001
 Create Date: 2026-08-04
 
-docs/ai-plan.md 의 AI 리눅스 학습 기능(backend/routers/ai_tutor.py, core/models.py)이
+AI 리눅스 학습 기능(backend/routers/ai_tutor.py, core/models.py)이
 사용하는 테이블을 최초로 생성한다. 0001과 같은 멱등 패턴을 따른다: 이미 존재하는
 테이블은 건드리지 않는다.
 """
