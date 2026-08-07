@@ -250,6 +250,7 @@
 .ai-log-hint { color: #c4b5fd; }
 .ai-log-grade { color: #f472b6; font-weight: 600; }
 .ai-log-system { color: #64748b; font-style: italic; }
+.ai-log-narration { color: #7dd3fc; }
 
 .ai-degraded-badge {
   margin-left: 8px;
@@ -258,6 +259,13 @@
   border-radius: 999px;
   background: #334155;
   color: #cbd5e1;
+}
+
+.ai-narration-label {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  margin-bottom: 2px;
 }
 
 .ai-input-row {

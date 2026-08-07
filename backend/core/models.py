@@ -237,6 +237,7 @@ class AICommandAttempt(Base):
     command_text = Column(String(2048), nullable=False)
     result_code = Column(String(32), nullable=False)
     output_text = Column(Text, nullable=False)
+    narration_text = Column(Text, nullable=True)
     state_before = Column(JSON, nullable=False)
     state_after = Column(JSON, nullable=False)
     is_task_success = Column(Boolean, nullable=False, default=False)

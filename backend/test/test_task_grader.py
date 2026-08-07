@@ -1,6 +1,7 @@
 """Stage 5 deterministic curriculum and task-grader checks."""
 from __future__ import annotations
 
+import inspect
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -158,6 +159,31 @@ def test_complete_without_bedrock() -> None:
     assert select_problem(completed) is None
 
 
+def test_grading_ignores_ai_narration() -> None:
+    """Locks the state-first grading contract: no parameter carries AI-authored text.
+
+    AICommandAttempt.narration_text (added for AI-generated command narration) is
+    never passed to grade_problem, and grading only ever reads `state` plus
+    commands that survived the parser allow-list. This test fails loudly if a
+    future change accidentally wires narration/output text into grading.
+    """
+    params = set(inspect.signature(grade_problem).parameters)
+    assert params == {
+        "problem", "state", "command_history", "previous_attempts", "hint_level",
+    }, params
+
+    problem = list_problems()[0]
+    state = deepcopy(problem["initial_state"])
+    without_history = grade_problem(problem, state)
+    # A narration-shaped string in command_history is inert unless it also
+    # happens to be a command the allow-list parser recognizes.
+    with_ai_text_in_history = grade_problem(
+        problem, state, ["[SIMULATION] AI가 지어낸 그럴듯한 텍스트입니다"]
+    )
+    assert without_history.grade == with_ai_text_in_history.grade
+    assert without_history.matched_state == with_ai_text_in_history.matched_state
+
+
 def main() -> None:
     test_all_answer_examples()
     test_state_first_alternative_success()
@@ -165,7 +191,9 @@ def main() -> None:
     test_safe_command_family_observation()
     test_hint_attempt_and_progress_policy()
     test_complete_without_bedrock()
-    print("PASS: 6 problems, 24 answer examples, grading, hints, deterministic progress")
+    test_grading_ignores_ai_narration()
+    print("PASS: 6 problems, 24 answer examples, grading, hints, deterministic progress, "
+          "AI-narration-blind contract")
 
 
 if __name__ == "__main__":

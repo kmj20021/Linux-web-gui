@@ -4,9 +4,10 @@ import '../styles/AITutor.css'
 
 // AI 리눅스 학습 페이지.
 // 명령은 실제로 실행되지 않고 backend/services/virtual_linux.py 의 결정적
-// 시뮬레이터가 처리한다. Bedrock 은 명령 실행 결과에는 관여하지 않고,
-// 오직 "AI 도우미" 패널의 질문/힌트 응답에만 쓰인다 — 터미널과 채팅은
-// 서로 다른 영역이라 섞이지 않는다.
+// 시뮬레이터가 채점 가능한 성공/실패를 결정한다. 미지원/무관한 명령을 치면
+// 터미널에는 원문(unsupported_syntax)이 그대로 남고, 백그라운드에서 Bedrock이
+// 현재 상태를 참고해 만든 설명이 AI 도우미 패널에 별도로 추가된다 — 이 설명은
+// 절대 virtual_state나 채점에 영향을 주지 않는다(narrateCommand 참고).
 function AITutor() {
   const [curriculum, setCurriculum] = useState([])
   const [curriculumError, setCurriculumError] = useState(null)
@@ -75,6 +76,21 @@ function AITutor() {
     setChatLog([])
   })
 
+  // Fire-and-forget: never awaited by runGuarded, never surfaces as a page
+  // error. On success it adds a standalone entry to the AI 도우미 panel; on
+  // failure or degradation it adds nothing, leaving the terminal untouched
+  // (see docs: AI 튜터 narrate 계획).
+  const narrateInBackground = (sessionId, attemptId, commandTextValue) => {
+    aiTutorAPI.narrateCommand(sessionId, attemptId)
+      .then((result) => {
+        if (result.narration.degraded) return
+        setChatLog(prev => [...prev,
+          { type: 'narration', text: result.narration.terminal_output, command: commandTextValue },
+        ])
+      })
+      .catch(() => { /* nothing to show */ })
+  }
+
   const submitCommand = () => {
     const text = commandText.trim()
     if (!text || !session) return
@@ -86,6 +102,9 @@ function AITutor() {
         { type: 'output', text: result.output },
       ])
       setSession(prev => ({ ...prev, virtual_state: { ...prev.virtual_state, version: result.version } }))
+      if (result.result_code !== 'success') {
+        narrateInBackground(session.id, result.attempt_id, text)
+      }
     })
   }
 
@@ -147,8 +166,9 @@ function AITutor() {
     <div className="ai-page">
       <div className="ai-simulation-notice">
         교육용 시뮬레이션입니다. 명령은 실제로 실행되지 않으며, 채점은 항상 서버의 규칙
-        기반 로직이 결정합니다. AI는 명령 결과에 대해 자동으로 코멘트하지 않고,
-        오른쪽 "AI 도우미"에서 직접 물어볼 때만 답합니다.
+        기반 로직이 결정합니다. 미지원하거나 문제와 무관한 명령을 치면 AI가 참고용 설명을
+        오른쪽 AI 도우미 패널에 추가로 보여줄 수 있지만, 이는 항상 표시용일 뿐 실제 상태나
+        채점에는 영향을 주지 않습니다.
       </div>
 
       <div className="ai-main">
@@ -239,6 +259,9 @@ function AITutor() {
                 <div className="ai-log ai-log-chat" ref={chatLogRef}>
                   {chatLog.map((entry, index) => (
                     <div key={index} className={`ai-log-entry ai-log-${entry.type}`}>
+                      {entry.type === 'narration' && (
+                        <span className="ai-narration-label">$ {entry.command}</span>
+                      )}
                       {entry.text}
                       {entry.degraded && <span className="ai-degraded-badge">규칙 기반</span>}
                     </div>

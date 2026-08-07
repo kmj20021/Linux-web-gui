@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from starlette.concurrency import run_in_threadpool
@@ -19,10 +20,11 @@ from core.models import (
 )
 from core.security import get_current_user
 from schemas.ai_tutor import (ChatRequest, ChatResponse, CommandRequest, CommandResponse,
-    CurriculumResponse, GradeResponse, HintResponse, HistoryResponse, ProgressInfo,
-    ResetRequest, SessionCreate, SessionResponse, VersionRequest)
+    CurriculumResponse, GradeResponse, HintResponse, HistoryResponse, NarrateResponse,
+    NarrationInfo, ProgressInfo, ResetRequest, SessionCreate, SessionResponse, VersionRequest)
 from services.ai_rate_limit import bedrock_rate_limiter
-from services.bedrock import BedrockService, BedrockTutorResult
+from services.bedrock import BedrockNarrationResult, BedrockService, BedrockTutorResult
+from services.command_parser import looks_like_shell_injection
 from services.curriculum import (REVIEW_PREFIX, curriculum_info, get_problem, hint_for_problem,
                                  initial_state, next_problem, problem_info)
 from services.task_grader import grade_problem
@@ -33,7 +35,7 @@ curriculum_router = APIRouter(prefix="/ai", tags=["AI Tutor"])
 bedrock_service = BedrockService()
 
 
-def _bedrock_dict(result: BedrockTutorResult) -> dict:
+def _bedrock_dict(result: BedrockTutorResult | BedrockNarrationResult) -> dict:
     return {
         "degraded": result.degraded, "reason": result.reason,
         "retryable": result.retryable, "message": result.message,
@@ -52,16 +54,18 @@ def _adapter_fallback() -> dict:
             "metadata": {}}
 
 
-async def _call_bedrock(user_id: int, *, reject: bool = True, **kwargs) -> dict:
+async def _call_bedrock(user_id: int, *, reject: bool = True,
+                         method: Callable[..., object] | None = None, **kwargs) -> dict:
     acquired, retry_after = await bedrock_rate_limiter.acquire(user_id)
     if not acquired:
         if reject:
             raise HTTPException(429, "Bedrock request is busy or cooling down",
                                 headers={"Retry-After": str(retry_after)})
         return _limited_bedrock()
+    call = method or bedrock_service.tutor
     try:
         try:
-            return _bedrock_dict(await run_in_threadpool(lambda: bedrock_service.tutor(**kwargs)))
+            return _bedrock_dict(await run_in_threadpool(lambda: call(**kwargs)))
         except Exception:
             return _adapter_fallback()
     finally:
@@ -255,6 +259,7 @@ async def get_history(
                 "command_text": item.command_text,
                 "result_code": item.result_code,
                 "output_text": item.output_text,
+                "narration_text": item.narration_text,
                 "state_before": item.state_before,
                 "state_after": item.state_after,
                 "is_task_success": item.is_task_success,
@@ -328,6 +333,38 @@ async def execute_learning_command(session_id: int, request: CommandRequest,
         output=execution.output, state_before=execution.state_before,
         state_after=execution.state_after,
         progress=_progress(grade, attempts, hint_level, following))
+
+
+@router.post("/{session_id}/commands/{attempt_id}/narrate", response_model=NarrateResponse)
+async def narrate_command(session_id: int, attempt_id: int,
+    db: AsyncSession = Depends(get_db), current_user: WebUser = Depends(get_current_user)):
+    session = await _owned_session(db, session_id, current_user.id)
+    _require_simulation(session)
+    attempt = (await db.execute(select(AICommandAttempt).where(
+        AICommandAttempt.id == attempt_id, AICommandAttempt.session_id == session.id,
+    ))).scalar_one_or_none()
+    if attempt is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Command attempt not found")
+    if attempt.result_code == "success":
+        raise HTTPException(400, "Only unsupported/unmatched commands can be narrated")
+    # Display-only enrichment: never touches state_json/version, so no optimistic
+    # lock is needed here (contrast with /commands and /hints). A rate-limited or
+    # failed call falls back quietly (reject=False) since this fires automatically
+    # after every non-success command and the caller has no way to retry it.
+    problem = get_problem(session.scenario_key, session.task_key)
+    rejection_kind = "injection" if looks_like_shell_injection(attempt.command_text) else "unmatched"
+    result = await _call_bedrock(current_user.id, reject=False, method=bedrock_service.narrate,
+        learner_level=session.level, problem=problem, state_summary=attempt.state_before,
+        last_command=attempt.command_text, rejection_kind=rejection_kind)
+    if not result["degraded"]:
+        attempt.narration_text = result["message"]
+        db.add(AIInteractionAudit(session_id=session.id, action="narrate",
+            scenario_key=session.scenario_key, task_key=session.task_key,
+            result_code=rejection_kind, details_json={"attempt_id": attempt.id}))
+    await db.commit()
+    return NarrateResponse(session_id=session.id, attempt_id=attempt.id,
+        narration=NarrationInfo(degraded=result["degraded"], reason=result["reason"],
+            terminal_output=result["message"], metadata=result["metadata"]))
 
 
 @router.post("/{session_id}/chat", response_model=ChatResponse)

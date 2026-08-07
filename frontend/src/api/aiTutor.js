@@ -55,6 +55,9 @@ export const aiTutorAPI = {
   command: (id, commandText, version) => request(`/sessions/${id}/commands`, {
     method: 'POST', body: JSON.stringify({ command_text: commandText, expected_version: version }),
   }),
+  narrateCommand: (id, attemptId) => request(`/sessions/${id}/commands/${attemptId}/narrate`, {
+    method: 'POST',
+  }),
   chat: (id, message) => request(`/sessions/${id}/chat`, {
     method: 'POST', body: JSON.stringify({ message }),
   }),

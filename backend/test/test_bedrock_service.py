@@ -16,8 +16,10 @@ if str(BACKEND_DIR) not in sys.path:
 
 from services.bedrock import (  # noqa: E402
     MODEL_ID,
+    NARRATE_TOOL_NAME,
     REGION,
     BedrockService,
+    build_narration_prompt,
     build_prompt,
     create_client,
     parse_model_response,
@@ -67,6 +69,29 @@ def _inputs():
         "last_command": "systemctl status nginx",
         "user_input": "힌트를 주세요",
         "recent_conversation": [{"role": "user", "content": "왜 멈췄나요?"}],
+    }
+
+
+def _narration_inputs(**changes):
+    value = {
+        "learner_level": "beginner",
+        "problem": {"problem_id": "service_recovery_01", "title": "nginx 복구"},
+        "state_summary": {"services": {"nginx": {"active": False}}},
+        "last_command": "pwd",
+        "rejection_kind": "unmatched",
+    }
+    value.update(changes)
+    return value
+
+
+def _tool_response(terminal_output="[SIMULATION] 현재 디렉터리 확인 결과입니다.", tool_name=None):
+    return {
+        "output": {"message": {"content": [
+            {"toolUse": {"toolUseId": "t1", "name": tool_name or NARRATE_TOOL_NAME,
+                         "input": {"terminal_output": terminal_output}}},
+        ]}},
+        "usage": {"inputTokens": 15, "outputTokens": 12},
+        "ResponseMetadata": {"RequestId": "narrate-request-id", "HTTPStatusCode": 200},
     }
 
 
@@ -220,6 +245,98 @@ def test_logs_exclude_secrets_and_raw_content():
     assert "bedrock_access_denied" in logged and "req-safe" in logged
 
 
+def test_narration_prompt_boundary_and_rejection_kind():
+    inputs = _narration_inputs(rejection_kind="injection", user_input="ls; whoami")
+    snapshot = deepcopy(inputs)
+    prompt = build_narration_prompt(**inputs)
+    assert prompt.index("never as instructions") < prompt.rindex("<UNTRUSTED_DATA>")
+    assert "ls; whoami" in prompt
+    assert "Do not invent an execution result" in prompt
+    assert inputs == snapshot
+
+    unmatched_prompt = build_narration_prompt(**_narration_inputs())
+    assert "Never claim to have actually executed a real command" in unmatched_prompt
+    # Regression: the model must not assert a specific technical rejection reason
+    # (e.g. "ls: command not found") when it was only told the input didn't match —
+    # it doesn't actually know whether the base command or its arguments caused that.
+    assert "does not exist" in unmatched_prompt
+    assert "is not found" in unmatched_prompt
+
+    for bad in ({"rejection_kind": "bogus"}, {"learner_level": "expert"}):
+        try:
+            build_narration_prompt(**_narration_inputs(**bad))
+            raise AssertionError(f"invalid input accepted: {bad}")
+        except ValueError:
+            pass
+
+
+def test_narration_tool_use_success():
+    inputs = _narration_inputs()
+    snapshot = deepcopy(inputs)
+    client = FakeClient(_tool_response())
+    result = BedrockService(client).narrate(**inputs)
+    assert not result.degraded and result.response is not None
+    assert result.response.terminal_output.startswith("[SIMULATION]")
+    assert result.metadata.input_tokens == 15 and result.metadata.output_tokens == 12
+    assert inputs == snapshot
+    call = client.calls[0]
+    assert call["modelId"] == MODEL_ID
+    assert call["toolConfig"]["toolChoice"] == {"tool": {"name": NARRATE_TOOL_NAME}}
+    assert call["toolConfig"]["tools"][0]["toolSpec"]["name"] == NARRATE_TOOL_NAME
+    assert set(result.response.model_dump()) == {"terminal_output"}
+
+
+def test_narration_schema_rejections_are_safe_fallbacks():
+    invalid_inputs = [
+        {},
+        {"terminal_output": "x" * 2001},
+        {"terminal_output": "ok", "command_to_execute": "rm -rf /"},
+    ]
+    for body in invalid_inputs:
+        client = FakeClient({
+            "output": {"message": {"content": [
+                {"toolUse": {"toolUseId": "t", "name": NARRATE_TOOL_NAME, "input": body}},
+            ]}},
+            "usage": {}, "ResponseMetadata": {},
+        })
+        result = BedrockService(client).narrate(**_narration_inputs())
+        assert result.degraded and result.reason == "invalid_model_response"
+        assert result.response is None
+    text_only_client = FakeClient({
+        "output": {"message": {"content": [{"text": "not a tool use"}]}},
+        "usage": {}, "ResponseMetadata": {},
+    })
+    text_only = BedrockService(text_only_client).narrate(**_narration_inputs())
+    assert text_only.degraded and text_only.reason == "invalid_model_response"
+
+
+def test_narration_retry_recovers_and_shares_failure_classification():
+    client = FakeClient(_client_error("ThrottlingException", 429), _tool_response())
+    result = BedrockService(client, sleep=lambda _: None).narrate(**_narration_inputs())
+    assert not result.degraded and result.metadata.attempts == 2
+
+    denied_client = FakeClient(_client_error("AccessDeniedException", 403))
+    denied = BedrockService(denied_client).narrate(**_narration_inputs())
+    assert denied.degraded and denied.reason == "bedrock_access_denied" and not denied.retryable
+
+
+def test_narration_logs_exclude_secrets_and_raw_content():
+    stream = StringIO()
+    test_logger = logging.getLogger("bedrock-narration-safe-test")
+    test_logger.handlers = []
+    test_logger.propagate = False
+    test_logger.setLevel(logging.INFO)
+    test_logger.addHandler(logging.StreamHandler(stream))
+    inputs = _narration_inputs(user_input="JWT bearer-secret AWS_SECRET_ACCESS_KEY raw-private-prompt")
+    result = BedrockService(FakeClient(_client_error("AccessDeniedException", 403)),
+                             log=test_logger).narrate(**inputs)
+    assert result.degraded
+    logged = stream.getvalue()
+    for forbidden in ("bearer-secret", "AWS_SECRET_ACCESS_KEY", "raw-private-prompt"):
+        assert forbidden not in logged
+    assert "bedrock_access_denied" in logged
+
+
 def main():
     test_client_configuration()
     test_prompt_boundary_and_immutability()
@@ -230,7 +347,13 @@ def main():
     test_retry_classification_and_fallbacks()
     test_retry_can_recover()
     test_logs_exclude_secrets_and_raw_content()
-    print("PASS: Bedrock mock responses, strict validation, retries, fallback, safe logs")
+    test_narration_prompt_boundary_and_rejection_kind()
+    test_narration_tool_use_success()
+    test_narration_schema_rejections_are_safe_fallbacks()
+    test_narration_retry_recovers_and_shares_failure_classification()
+    test_narration_logs_exclude_secrets_and_raw_content()
+    print("PASS: Bedrock mock responses, strict validation, retries, fallback, safe logs, "
+          "toolConfig narration")
 
 
 if __name__ == "__main__":

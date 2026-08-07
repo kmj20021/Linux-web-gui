@@ -17,12 +17,13 @@ from core.models import AIChatMessage, AICommandAttempt, AILearningSession, WebU
 from core.security import create_access_token, get_current_user
 import routers.ai_tutor as ai_router
 from routers.ai_tutor import (chat, create_session, execute_learning_command, get_curriculum,
-                              get_history, get_session, grade, hint, reset_session)
+                              get_history, get_session, grade, hint, narrate_command, reset_session)
 from routers.ai_tutor import curriculum_router
 from schemas.ai_tutor import (ChatRequest, CommandRequest, ResetRequest, SessionCreate,
                               VersionRequest)
 from services.ai_rate_limit import bedrock_rate_limiter
-from services.bedrock import BedrockMetadata, BedrockTutorResult, TutorModelResponse
+from services.bedrock import (BedrockMetadata, BedrockNarrationResult, BedrockTutorResult,
+                              NarrationResponse, TutorModelResponse)
 from services.curriculum import get_problem, initial_state, list_problems
 
 
@@ -109,6 +110,13 @@ async def main() -> None:
                             terminal_output="ok", explanation="안전한 설명", hint_level=0,
                             suggested_concept="service"), metadata=BedrockMetadata(
                                 latency_ms=1, attempts=1))
+
+                def narrate(self, **kwargs):
+                    self.calls.append(kwargs)
+                    return BedrockNarrationResult(degraded=False, reason=None, retryable=False,
+                        message="[SIMULATION] 안전한 나레이션",
+                        response=NarrationResponse(terminal_output="[SIMULATION] 안전한 나레이션"),
+                        metadata=BedrockMetadata(latency_ms=1, attempts=1))
             fake_bedrock = FakeBedrock()
             ai_router.bedrock_service = fake_bedrock
             bedrock_rate_limiter.cooldown_seconds = 0
@@ -124,6 +132,39 @@ async def main() -> None:
                                   if item.type == "command" and item.id == listed.attempt_id)
             assert listed_attempt.data["output_text"] == listed.output
             assert listed_attempt.data["state_before"] == listed_attempt.data["state_after"]
+
+            await expect_http(400, narrate_command(common_command_session.id, listed.attempt_id, db, owner))
+            unmatched = await execute_learning_command(common_command_session.id,
+                CommandRequest(command_text="pwd", expected_version=listed.version), db, owner)
+            assert unmatched.result_code == "unsupported_syntax"
+            narrated = await narrate_command(common_command_session.id, unmatched.attempt_id, db, owner)
+            assert not narrated.narration.degraded
+            assert narrated.narration.terminal_output == "[SIMULATION] 안전한 나레이션"
+            assert fake_bedrock.calls[-1]["rejection_kind"] == "unmatched"
+            assert fake_bedrock.calls[-1]["last_command"] == "pwd"
+            narrated_history = await get_history(common_command_session.id, db, owner)
+            narrated_attempt = next(item for item in narrated_history.items
+                                    if item.type == "command" and item.id == unmatched.attempt_id)
+            assert narrated_attempt.data["narration_text"] == "[SIMULATION] 안전한 나레이션"
+            await expect_http(404, narrate_command(common_command_session.id, 999999, db, owner))
+            await expect_http(404, narrate_command(common_command_session.id, unmatched.attempt_id, db, other))
+
+            # Rate-limited/broken narration falls back quietly (no 429), leaving the
+            # deterministic original text in place — the caller has no retry button.
+            class ExplodingNarration:
+                def narrate(self, **kwargs):
+                    raise RuntimeError("boom")
+            ai_router.bedrock_service = ExplodingNarration()
+            degraded_unmatched = await execute_learning_command(common_command_session.id,
+                CommandRequest(command_text="whoami", expected_version=unmatched.version), db, owner)
+            degraded_narrated = await narrate_command(common_command_session.id,
+                degraded_unmatched.attempt_id, db, owner)
+            assert degraded_narrated.narration.degraded
+            degraded_history = await get_history(common_command_session.id, db, owner)
+            degraded_attempt = next(item for item in degraded_history.items
+                                    if item.type == "command" and item.id == degraded_unmatched.attempt_id)
+            assert degraded_attempt.data["narration_text"] is None
+            ai_router.bedrock_service = fake_bedrock
 
             # Complete the five real tasks through the public service functions
             # without Bedrock/AWS. The sixth (final) slot is a review round of
@@ -243,6 +284,9 @@ async def main() -> None:
             class ExplodingBedrock:
                 def tutor(self, **kwargs):
                     raise RuntimeError("raw-secret-error")
+
+                def narrate(self, **kwargs):
+                    raise RuntimeError("raw-secret-error")
             ai_router.bedrock_service = ExplodingBedrock()
             await bedrock_rate_limiter.reset()
             failure_session = await create_session(payload, db, owner)
@@ -314,7 +358,8 @@ async def main() -> None:
                     raise AssertionError(f"{model.__name__} must reject extra fields")
 
         await engine.dispose()
-    print("PASS: create/get/reset/history, 401/403/404/409/422, isolation, deterministic history")
+    print("PASS: create/get/reset/history, 401/403/404/409/422, isolation, deterministic history, "
+          "narrate happy/degraded/400/404 paths")
 
 
 if __name__ == "__main__":

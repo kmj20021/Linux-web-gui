@@ -31,11 +31,16 @@ _ACTIONS = {
 _SIMPLE = {"useradd", "userdel", "usermod", "passwd", "chmod", "chown", "ls", "cat", "ss", "curl", "ping"}
 
 
+def looks_like_shell_injection(command_text: str) -> bool:
+    """True when the raw text contains shell metacharacters this parser always rejects."""
+    return bool(_SHELL_SYNTAX.search(command_text))
+
+
 def parse_command(command_text: str) -> ParseResult:
     """Parse one allow-listed command without invoking a shell."""
     if not isinstance(command_text, str) or not command_text.strip():
         return ParseResult("unsupported_syntax")
-    if _SHELL_SYNTAX.search(command_text):
+    if looks_like_shell_injection(command_text):
         return ParseResult("unsupported_syntax")
 
     try:

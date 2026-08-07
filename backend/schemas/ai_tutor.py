@@ -114,6 +114,19 @@ class CommandResponse(BaseModel):
     progress: ProgressInfo
 
 
+class NarrationInfo(BaseModel):
+    degraded: bool
+    reason: str | None
+    terminal_output: str
+    metadata: dict[str, Any]
+
+
+class NarrateResponse(BaseModel):
+    session_id: int
+    attempt_id: int
+    narration: NarrationInfo
+
+
 class ChatResponse(BaseModel):
     session_id: int
     scenario_id: str
