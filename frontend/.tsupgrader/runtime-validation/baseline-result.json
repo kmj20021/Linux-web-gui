@@ -1,0 +1,38 @@
+{
+  "planHash": "5930727caf2f67b2e3d0831ff52486efb2366bbd3eddc658f06a51fc39e0c75d",
+  "phase": "baseline",
+  "recordedAtUtc": "2026-09-06T06:41:11.9217499Z",
+  "retryCount": 0,
+  "resetBaseline": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "Production build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": false,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "\u003Cspawn error: An error occurred trying to start process \u0027npm.cmd run build\u0027 with working directory \u0027c:\\Users\\user\\my_pj\\linux-web-gui\\frontend\u0027. \uC9C0\uC815\uB41C \uD30C\uC77C\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.\u003E\n",
+        "durationMs": 1
+      },
+      {
+        "name": "Vitest suite",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": false,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "\u003Cspawn error: An error occurred trying to start process \u0027npm.cmd test -- --run\u0027 with working directory \u0027c:\\Users\\user\\my_pj\\linux-web-gui\\frontend\u0027. \uC9C0\uC815\uB41C \uD30C\uC77C\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.\u003E\n",
+        "durationMs": 1
+      }
+    ]
+  }
+}

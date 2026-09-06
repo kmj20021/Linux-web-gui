@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "name": "frontend-upgrade-baseline",
+  "projectType": "webapp",
+  "assertions": [
+    {
+      "name": "Production build",
+      "command": "npm.cmd run build",
+      "cwd": ".",
+      "expected": "0"
+    },
+    {
+      "name": "Vitest suite",
+      "command": "npm.cmd test -- --run",
+      "cwd": ".",
+      "expected": "0"
+    }
+  ]
+}
