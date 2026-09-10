@@ -32,7 +32,7 @@ function Layout({ children }) {
 
         {/* Footer */}
         <footer className="footer">
-          <p>&copy; 2026 Linux Web GUI - 리눅스 학습 사이트</p>
+          <p>&copy; 2026 리눅스 학습 사이트</p>
         </footer>
       </div>
     </div>
@@ -51,7 +51,7 @@ function getPageTitle(pathname) {
     '/terminal': '터미널',
     '/ai-tutor': 'AI 리눅스 학습',
   }
-  return titles[pathname] || 'Linux Web GUI'
+  return titles[pathname] || '리눅스 학습 사이트'
 }
 
 export default Layout

@@ -70,7 +70,7 @@ except ImportError as e:
 
 
 app = FastAPI(
-    title="Linux Web GUI API",
+    title="리눅스 학습 사이트 API",
     description="통합 관리 시스템 REST API",
     version="1.0.0"
 )

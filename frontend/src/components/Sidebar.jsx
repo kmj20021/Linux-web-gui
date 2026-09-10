@@ -70,7 +70,7 @@ function Sidebar() {
           </svg>
         </div>
         <div>
-          <div className="brand-text">LinuxViz</div>
+          <div className="brand-text">리눅스 학습 사이트</div>
           <div className="brand-sub">AWS EC2 · Ubuntu</div>
         </div>
       </div>

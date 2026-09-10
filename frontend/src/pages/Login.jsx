@@ -79,7 +79,7 @@ function Login() {
               <rect x="15" y="15" width="8" height="8" rx="1.5" fill="white" opacity="0.5"/>
             </svg>
           </div>
-          <h1 className="login-title">LinuxViz</h1>
+          <h1 className="login-title">리눅스 학습 사이트</h1>
           <p className="login-subtitle">시스템 관리 콘솔에 로그인하세요</p>
         </div>
 

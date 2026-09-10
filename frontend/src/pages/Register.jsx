@@ -96,7 +96,7 @@ function Register() {
               <rect x="15" y="15" width="8" height="8" rx="1.5" fill="white" opacity="0.5"/>
             </svg>
           </div>
-          <h1 className="login-title">LinuxViz</h1>
+          <h1 className="login-title">리눅스 학습 사이트</h1>
           <p className="login-subtitle">새 계정을 만드세요</p>
         </div>
 
