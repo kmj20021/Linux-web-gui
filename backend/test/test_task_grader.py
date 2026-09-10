@@ -11,6 +11,8 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from services.curriculum import (  # noqa: E402
+    REVIEW_PREFIX,
+    curriculum_info,
     hint_for_problem,
     list_problems,
     next_problem,
@@ -159,6 +161,45 @@ def test_complete_without_bedrock() -> None:
     assert select_problem(completed) is None
 
 
+def test_every_fixture_problem_precedes_the_review_round() -> None:
+    """The review round is an extra final slot, not a replacement for a problem.
+
+    Every problem defined in the fixture must be reachable by normal
+    progression; the review round follows all of them.
+    """
+    problems = list_problems()
+    total_slots = len(problems) + 1
+    items = curriculum_info()
+
+    assert len(items) == total_slots
+    assert [item["task_id"] for item in items[:-1]] == [p["problem_id"] for p in problems]
+    for index, item in enumerate(items[:-1], start=1):
+        assert item["task_index"] == index and item["total_tasks"] == total_slots
+    assert items[-1]["task_id"] == "review"
+    assert items[-1]["task_index"] == total_slots and items[-1]["total_tasks"] == total_slots
+
+    # The last fixture problem is reached, not skipped.
+    penultimate, last = problems[-2], problems[-1]
+    following = next_problem(
+        penultimate["scenario_id"], penultimate["problem_id"], grade="success"
+    )
+    assert following and following["problem_id"] == last["problem_id"]
+
+    # Only after the last fixture problem does the review round begin, and it
+    # may reuse any completed problem including the last one.
+    review = next_problem(
+        last["scenario_id"], last["problem_id"], grade="success", session_seed=1
+    )
+    assert review and review["problem_id"].startswith(REVIEW_PREFIX)
+    assert review["problem_id"][len(REVIEW_PREFIX):] in {p["problem_id"] for p in problems}
+    assert review["difficulty"] == "advanced"
+
+    # The review round is terminal: success completes the curriculum.
+    assert next_problem(
+        review["scenario_id"], review["problem_id"], grade="success", session_seed=1
+    ) is None
+
+
 def test_grading_ignores_ai_narration() -> None:
     """Locks the state-first grading contract: no parameter carries AI-authored text.
 
@@ -191,6 +232,7 @@ def main() -> None:
     test_safe_command_family_observation()
     test_hint_attempt_and_progress_policy()
     test_complete_without_bedrock()
+    test_every_fixture_problem_precedes_the_review_round()
     test_grading_ignores_ai_narration()
     print("PASS: 6 problems, 24 answer examples, grading, hints, deterministic progress, "
           "AI-narration-blind contract")

@@ -42,3 +42,21 @@ nul
 
 # --- ai ---
 
+
+# --- 논문 (저장소에 올리지 않음) ---
+docs/thesis/
+docs/thlesis-tocs/
+docs/TOC.md
+docs/ref-thesis.md
+docs/1/논문-목차(흐름).txt
+docs/실시간*.pdf
+
+# --- 자소서 / 개인 이력 (저장소에 올리지 않음) ---
+docs/cover letter/
+docs/daily-career.md
+docs/daily-recall.md
+docs/crawl_results.xlsx
+
+# --- HWP 표 편집 작업 도구 (논문 부속) ---
+docs/hwp-table-editing.md
+scripts/hwp/

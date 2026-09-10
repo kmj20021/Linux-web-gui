@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 730" width="1520" height="730" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <style>
+    .ink { fill:#16181d; }
+    .mut { fill:#63676f; }
+    .acc { fill:#9c3d2e; }
+    .b   { font-weight:700; }
+    .mono{ font-family:'Consolas','Courier New',monospace; }
+    .eyebrow { fill:#63676f; font-size:12px; letter-spacing:2px; }
+  </style>
+
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#16181d"/></marker>
+    <marker id="tipA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9c3d2e"/></marker>
+  </defs>
+
+  <rect width="1520" height="730" fill="#ffffff"/>
+
+  <!-- ────────── Learner ────────── -->
+  <rect x="630" y="18" width="260" height="46" fill="none" stroke="#16181d" stroke-width="1.2"/>
+  <text x="760" y="47" text-anchor="middle" class="ink b" font-size="15">Learner (learning UI)</text>
+
+  <line x1="760" y1="64" x2="760" y2="82" stroke="#16181d" stroke-width="1.2"/>
+  <path d="M760,82 H375 V108" fill="none" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <path d="M760,82 H1145 V108" fill="none" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <text x="363" y="98" text-anchor="end" class="ink" font-size="13">Command input</text>
+  <text x="1157" y="98" class="ink" font-size="13">Question · hint · automatic UI request</text>
+
+  <!-- ────────── Critical-path boundary ────────── -->
+  <line x1="760" y1="112" x2="760" y2="612" stroke="#b9bdc4" stroke-width="1.2" stroke-dasharray="4 5"/>
+
+  <!-- ══════════ Left : deterministic ══════════ -->
+  <line x1="60" y1="112" x2="690" y2="112" stroke="#16181d" stroke-width="1.8"/>
+  <text x="60" y="138" class="eyebrow">CRITICAL PATH · DETERMINISTIC</text>
+  <text x="60" y="170" class="ink b mono" font-size="18">POST /api/ai/sessions/{id}/commands</text>
+  <line x1="60" y1="184" x2="690" y2="184" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="216" class="mut b" font-size="14">1</text>
+  <text x="100" y="216" class="ink" font-size="15">Session ownership and state version check</text>
+  <line x1="60" y1="236" x2="690" y2="236" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="268" class="mut b" font-size="14">2</text>
+  <text x="100" y="268" class="ink" font-size="15">Command parsing and virtual state transition</text>
+  <line x1="60" y1="288" x2="690" y2="288" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="320" class="mut b" font-size="14">3</text>
+  <text x="100" y="320" class="ink" font-size="15">Command attempt recorded</text>
+  <line x1="60" y1="340" x2="690" y2="340" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="372" class="mut b" font-size="14">4</text>
+  <text x="100" y="372" class="ink" font-size="15">Virtual state update, on success only</text>
+  <line x1="60" y1="392" x2="690" y2="392" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="424" class="mut b" font-size="14">5</text>
+  <text x="100" y="424" class="ink" font-size="15">Grading against the final state</text>
+  <line x1="60" y1="444" x2="690" y2="444" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="476" class="mut b" font-size="14">6</text>
+  <text x="100" y="476" class="ink" font-size="15">Progress preview computed, persisted by /grade</text>
+  <line x1="60" y1="496" x2="690" y2="496" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="528" class="acc b" font-size="14">7</text>
+  <text x="100" y="528" class="acc b" font-size="15">Response returned — the rule engine decides the verdict</text>
+  <line x1="60" y1="548" x2="690" y2="548" stroke="#16181d" stroke-width="1.4"/>
+
+  <text x="60" y="580" class="ink b" font-size="14">No language-model call occurs anywhere in steps 1 – 7.</text>
+
+  <!-- ────────── Handoff of the confirmed verdict ────────── -->
+  <line x1="696" y1="390" x2="824" y2="390" stroke="#9c3d2e" stroke-width="2.2" marker-end="url(#tipA)"/>
+  <rect x="690" y="340" width="140" height="42" fill="#ffffff"/>
+  <text x="760" y="356" text-anchor="middle" class="acc b" font-size="14">Confirmed verdict</text>
+  <text x="760" y="374" text-anchor="middle" class="acc b" font-size="14">passed in as input</text>
+
+  <!-- ══════════ Right : display-only ══════════ -->
+  <line x1="830" y1="112" x2="1460" y2="112" stroke="#16181d" stroke-width="1.8"/>
+  <text x="830" y="138" class="eyebrow">OFF THE CRITICAL PATH · DISPLAY ONLY</text>
+  <text x="830" y="170" class="ink b" font-size="18">Separate follow-up requests</text>
+  <line x1="830" y1="184" x2="1460" y2="184" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="830" y="211" class="ink mono" font-size="14">POST .../commands/{attempt_id}/narrate</text>
+  <line x1="830" y1="226" x2="1460" y2="226" stroke="#d5d8dd" stroke-width="1"/>
+  <text x="830" y="253" class="ink mono" font-size="14">POST .../chat</text>
+  <line x1="830" y1="268" x2="1460" y2="268" stroke="#d5d8dd" stroke-width="1"/>
+  <text x="830" y="295" class="ink mono" font-size="14">POST .../hints</text>
+  <line x1="830" y1="310" x2="1460" y2="310" stroke="#16181d" stroke-width="1.2"/>
+
+  <text x="830" y="340" class="ink b" font-size="15">Prompt composition</text>
+  <line x1="832" y1="350" x2="832" y2="422" stroke="#9c3d2e" stroke-width="1.6"/>
+  <text x="852" y="370" class="mut mono" font-size="13">&lt;UNTRUSTED_DATA&gt;</text>
+  <text x="852" y="394" class="ink" font-size="14">Learner level · task definition · virtual state · <tspan class="acc b">confirmed verdict</tspan></text>
+  <text x="852" y="416" class="ink" font-size="14">Last command · question · last 4 turns · last 5 grading records</text>
+  <line x1="830" y1="432" x2="1460" y2="432" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="830" y="460" class="ink b" font-size="16">Amazon Bedrock (LLM)</text>
+  <line x1="830" y1="476" x2="1460" y2="476" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="830" y="504" class="ink b" font-size="15">Display-only response — only the enumerated fields</text>
+  <text x="830" y="528" class="ink mono" font-size="13">terminal_output · explanation · hint_level(0-3) · suggested_concept</text>
+  <text x="830" y="552" class="acc b" font-size="14">No verdict field exists in the response.</text>
+  <line x1="830" y1="570" x2="1460" y2="570" stroke="#16181d" stroke-width="1.4"/>
+
+  <text x="830" y="602" class="ink b" font-size="14">The model receives the confirmed verdict as input and never returns one.</text>
+
+  <!-- ══════════ Tables written ══════════ -->
+  <line x1="375" y1="618" x2="375" y2="646" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <line x1="1145" y1="618" x2="1145" y2="646" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+
+  <line x1="60" y1="648" x2="1460" y2="648" stroke="#16181d" stroke-width="1.8"/>
+  <text x="60" y="680" class="ink b" font-size="14">Tables written</text>
+
+  <line x1="512" y1="658" x2="512" y2="694" stroke="#d5d8dd" stroke-width="1"/>
+  <line x1="822" y1="658" x2="822" y2="694" stroke="#d5d8dd" stroke-width="1"/>
+  <line x1="1132" y1="658" x2="1132" y2="694" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="230" y="680" class="ink mono" font-size="13">ai_command_attempts</text>
+  <text x="540" y="680" class="ink mono" font-size="13">ai_virtual_states</text>
+  <text x="850" y="680" class="ink mono" font-size="13">ai_chat_messages</text>
+  <text x="1160" y="680" class="ink mono" font-size="13">ai_interaction_audits</text>
+
+  <line x1="60" y1="702" x2="1460" y2="702" stroke="#d5d8dd" stroke-width="1"/>
+</svg>

@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1530" width="1400" height="1530" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <style>
+    .ink { fill:#16181d; }
+    .mut { fill:#3c4046; font-weight:600; }
+    .acc { fill:#9c3d2e; }
+    .b   { font-weight:700; }
+    .mono{ font-family:'Consolas','Courier New',monospace; }
+    .region { fill:none; stroke:#16181d; stroke-width:3.2; }
+    .hair { stroke:#9ba1a9; stroke-width:2.2; }
+    .heavy { stroke:#16181d; stroke-width:3.6; }
+  </style>
+
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#16181d"/></marker>
+  </defs>
+
+  <rect width="1400" height="1530" fill="#ffffff"/>
+
+  <!-- ────────── User (Web Browser) ────────── -->
+  <rect x="260" y="36" width="880" height="126" class="region"/>
+  <text x="278" y="78" class="ink b" font-size="34">User (Web Browser)</text>
+  <line x1="278" y1="94" x2="1122" y2="94" class="heavy"/>
+  <line x1="560" y1="108" x2="560" y2="148" class="hair"/>
+  <line x1="840" y1="108" x2="840" y2="148" class="hair"/>
+
+  <text x="278" y="138" class="ink b" font-size="27">Dashboard</text>
+  <text x="578" y="138" class="ink b" font-size="27">AI Linux Learning</text>
+  <text x="858" y="138" class="ink b" font-size="27">Terminal</text>
+
+  <line x1="700" y1="162" x2="700" y2="224" stroke="#16181d" stroke-width="3" marker-start="url(#tip)" marker-end="url(#tip)"/>
+  <text x="718" y="200" class="mut" font-size="22">Static assets · <tspan class="mono">/api</tspan> · <tspan class="mono">/ws</tspan></text>
+
+  <!-- ────────── Nginx ────────── -->
+  <rect x="260" y="226" width="880" height="118" class="region"/>
+  <text x="278" y="268" class="ink b" font-size="34">Nginx (Reverse Proxy)</text>
+  <line x1="278" y1="284" x2="1122" y2="284" class="heavy"/>
+  <text x="278" y="322" class="mut" font-size="24">The only externally exposed entry point · serves the frontend · proxies /api /ws</text>
+
+  <line x1="700" y1="344" x2="700" y2="406" stroke="#16181d" stroke-width="3" marker-end="url(#tip)"/>
+
+  <!-- ────────── FastAPI Backend ────────── -->
+  <rect x="260" y="408" width="880" height="166" class="region"/>
+  <text x="278" y="450" class="ink b" font-size="34">FastAPI Backend</text>
+  <line x1="278" y1="466" x2="1122" y2="466" class="heavy"/>
+  <line x1="700" y1="480" x2="700" y2="560" class="hair"/>
+  <line x1="278" y1="520" x2="1122" y2="520" class="hair"/>
+
+  <text x="278" y="508" class="ink b" font-size="27">Authentication · Authorization</text>
+  <text x="718" y="508" class="ink b" font-size="27">API Routers</text>
+  <text x="278" y="552" class="ink b" font-size="27">Metrics Collector</text>
+  <text x="718" y="552" class="ink b" font-size="27">Job Scheduler</text>
+
+  <!-- Backend → three paths -->
+  <path d="M480,574 V600 H250 V624" fill="none" stroke="#16181d" stroke-width="3" marker-end="url(#tip)"/>
+  <line x1="700" y1="574" x2="700" y2="624" stroke="#16181d" stroke-width="3" marker-end="url(#tip)"/>
+  <path d="M920,574 V600 H1150 V624" fill="none" stroke="#16181d" stroke-width="3" marker-end="url(#tip)"/>
+
+  <!-- ────────── 1 Monitoring Path ────────── -->
+  <rect x="40" y="626" width="420" height="560" class="region"/>
+  <text x="58" y="668" class="ink b" font-size="34">1 &#160;Monitoring Path</text>
+  <text x="58" y="698" class="mut" font-size="22">Resource observation ·</text>
+  <text x="58" y="724" class="mut" font-size="22">no generative AI involved</text>
+  <line x1="58" y1="764" x2="442" y2="764" class="heavy"/>
+
+  <text x="58" y="800" class="ink b" font-size="27">Real-time Stream</text>
+  <text x="58" y="830" class="mut" font-size="24">CPU · memory · top processes</text>
+  <line x1="58" y1="856" x2="442" y2="856" class="hair"/>
+
+  <text x="58" y="892" class="ink b" font-size="27">History Storage · Retrieval</text>
+  <text x="58" y="922" class="mut" font-size="24">The same items stored</text>
+  <text x="58" y="948" class="mut" font-size="24">periodically</text>
+  <line x1="58" y1="974" x2="442" y2="974" class="hair"/>
+
+  <text x="58" y="1010" class="ink b" font-size="27">Items Outside the Stream</text>
+  <text x="58" y="1040" class="mut" font-size="24">Disk · network (REST retrieval)</text>
+
+  <!-- ────────── 2 Learning Path ────────── -->
+  <rect x="490" y="626" width="420" height="560" class="region"/>
+  <text x="508" y="668" class="ink b" font-size="34">2 &#160;Learning Path</text>
+  <text x="508" y="698" class="mut" font-size="20">(Virtual Practice · Grading · Explanation)</text>
+  <text x="508" y="724" class="mut" font-size="22">Safe Linux practice · nothing is</text>
+  <text x="508" y="750" class="mut" font-size="22">actually executed</text>
+  <line x1="508" y1="764" x2="892" y2="764" class="heavy"/>
+
+  <text x="534" y="800" class="ink b" font-size="25">Virtual Linux State Engine</text>
+  <text x="534" y="828" class="mut" font-size="24">Command parsing ·</text>
+  <text x="534" y="854" class="mut" font-size="24">state transition</text>
+
+  <line x1="514" y1="866" x2="514" y2="894" stroke="#16181d" stroke-width="3" marker-end="url(#tip)"/>
+
+  <text x="534" y="906" class="ink b" font-size="25">Rule-based Grader</text>
+  <text x="534" y="934" class="mut" font-size="24">Success · partial · failure</text>
+
+  <line x1="514" y1="946" x2="514" y2="974" stroke="#16181d" stroke-width="3" marker-end="url(#tip)"/>
+
+  <text x="534" y="986" class="acc b" font-size="25">Amazon Bedrock</text>
+  <text x="534" y="1014" class="mut" font-size="24">Explanation · hints</text>
+  <text x="534" y="1040" class="mut" font-size="24">(external AI)</text>
+
+  <line x1="508" y1="1062" x2="892" y2="1062" class="hair"/>
+  <text x="508" y="1094" class="mut" font-size="22">Entered commands are applied</text>
+  <text x="508" y="1120" class="mut" font-size="22">only to the virtual state, not to</text>
+  <text x="508" y="1146" class="mut" font-size="22">the real server.</text>
+
+  <!-- ────────── 3 Execution Path ────────── -->
+  <rect x="940" y="626" width="420" height="560" class="region"/>
+  <text x="958" y="668" class="ink b" font-size="34">3 &#160;Execution Path</text>
+  <text x="958" y="698" class="mut" font-size="20">(Web Terminal)</text>
+  <text x="958" y="724" class="mut" font-size="22">Actually executed in an</text>
+  <text x="958" y="750" class="mut" font-size="22">isolated environment</text>
+  <line x1="958" y1="764" x2="1342" y2="764" class="heavy"/>
+
+  <text x="958" y="800" class="ink b" font-size="27">Docker Socket Proxy</text>
+  <text x="958" y="830" class="mut" font-size="24">Passes only container and</text>
+  <text x="958" y="856" class="mut" font-size="24">image requests of the</text>
+  <text x="958" y="882" class="mut" font-size="24">Docker API</text>
+  <line x1="958" y1="908" x2="1342" y2="908" class="hair"/>
+
+  <text x="958" y="944" class="ink b" font-size="27">Actual Execution in an</text>
+  <text x="958" y="972" class="ink b" font-size="27">Isolated Container</text>
+  <text x="958" y="1004" class="mut" font-size="24">Network disabled · read-only ·</text>
+  <text x="958" y="1030" class="mut" font-size="24">no privilege escalation</text>
+  <text x="958" y="1056" class="mut" font-size="24">Resource limits (CPU · memory ·</text>
+  <text x="958" y="1082" class="mut" font-size="24">process count)</text>
+
+  <!-- Paths → SQLite -->
+  <line x1="250" y1="1186" x2="250" y2="1240" stroke="#16181d" stroke-width="3" marker-end="url(#tip)"/>
+  <line x1="700" y1="1186" x2="700" y2="1240" stroke="#16181d" stroke-width="3" marker-end="url(#tip)"/>
+
+  <!-- ────────── SQLite ────────── -->
+  <rect x="40" y="1242" width="1320" height="150" class="region"/>
+  <text x="58" y="1284" class="ink b" font-size="34">SQLite Database</text>
+  <line x1="58" y1="1300" x2="1342" y2="1300" class="heavy"/>
+  <text x="58" y="1338" class="mut" font-size="24">8 tables — users · login records · monitoring history · learning sessions ·</text>
+  <text x="58" y="1370" class="mut" font-size="24">virtual states · command attempts · chat · interaction audits</text>
+
+  <!-- ────────── Notes ────────── -->
+  <line x1="40" y1="1424" x2="1360" y2="1424" class="heavy"/>
+  <text x="40" y="1458" class="mut" font-size="22">· Resource collection runs inside the backend process; there is no separate collection agent.</text>
+  <text x="40" y="1490" class="mut" font-size="22">· The execution path writes nothing to the database and shares no system state with the learning path.</text>
+</svg>

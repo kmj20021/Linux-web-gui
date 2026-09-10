@@ -296,38 +296,49 @@ async def get_history(
 @router.post("/{session_id}/commands", response_model=CommandResponse)
 async def execute_learning_command(session_id: int, request: CommandRequest,
     db: AsyncSession = Depends(get_db), current_user: WebUser = Depends(get_current_user)):
-    session = await _owned_session(db, session_id, current_user.id)
-    _require_simulation(session)
-    if session.status == "completed":
+    session = await _owned_session(db, session_id, current_user.id) # 이 세션이 현재 로그인한 사용자의 세션인지?
+    _require_simulation(session)    # 시뮬레이션 모드인지?
+    if session.status == "completed":   # 이미 끝난 학습인지?
         raise HTTPException(409, "Curriculum is completed")
     await _version_or_409(session, request.expected_version)
     # Command execution is silent by design: the deterministic simulator
     # decides the output, and Bedrock never comments on it here. AI advice
     # is only available through the separate /chat and /hints endpoints.
     execution = execute_command(session.virtual_state.state_json, request.command_text)
-    attempt = AICommandAttempt(session_id=session.id, mode="simulation",
-        command_text=request.command_text, result_code=execution.result_code,
-        output_text=execution.output, state_before=execution.state_before,
-        state_after=execution.state_after, is_task_success=False)
+    attempt = AICommandAttempt(session_id=session.id,   #어느 세션에서 실행했는가?
+                               mode="simulation",       # 시뮬레이션 모드에서 실행했는가?
+                               command_text=request.command_text,   #사용자가 입력한 명령어
+                               result_code=execution.result_code,   # 실행 결과 코드(success, failure, etc.)
+                               output_text=execution.output,        # 실행 결과 출력
+                               state_before=execution.state_before, # 실행 전 상태
+                               state_after=execution.state_after,   # 실행 후 상태 
+                               is_task_success=False)               # 실행 후 상태가 문제 해결에 성공했는지 여부
     db.add(attempt)
-    if execution.result_code == "success":
-        changed = await db.execute(update(AIVirtualState).where(
-            AIVirtualState.session_id == session.id,
-            AIVirtualState.version == request.expected_version).values(
-            state_json=execution.state_after, version=request.expected_version + 1,
-            updated_at=datetime.now(timezone.utc)))
-        if changed.rowcount != 1:
+    if execution.result_code == "success":  # 만약 실행 결과가 성공이라면, 상태를 업데이트하고 버전을 증가시킨다.
+        changed = await db.execute( 
+            update(AIVirtualState)  # 업데이트 쿼리 실행
+            .where(                 # 업데이트 조건: 세션 ID와 버전이 일치하는 경우
+                AIVirtualState.session_id == session.id,
+                AIVirtualState.version == request.expected_version
+            )
+            .values(                # 업데이트할 값: 상태 JSON, 버전 증가, 업데이트 시간
+            state_json=execution.state_after, 
+            version=request.expected_version + 1,
+            updated_at=datetime.now(timezone.utc)
+            )
+        )
+        if changed.rowcount != 1:   # 만약 업데이트된 행의 수가 1이 아니라면, 버전 충돌이 발생한 것으로 간주하고 롤백 후 409 에러를 반환한다.
             await db.rollback()
             raise HTTPException(409, "Virtual state version conflict")
     await db.commit()
-    await db.refresh(attempt)
-    await db.refresh(session.virtual_state)
-    problem = get_problem(session.scenario_key, session.task_key)
-    grade = grade_problem(problem, session.virtual_state.state_json).grade
-    attempts, hint_level = await _task_stats(db, session)
+    await db.refresh(attempt)               # 커밋 후, 시도 객체를 새로고침하여 최신 상태를 반영한다.
+    await db.refresh(session.virtual_state) # 커밋 후, 세션의 가상 상태를 새로고침하여 최신 상태를 반영한다.
+    problem = get_problem(session.scenario_key, session.task_key)           # 현재 세션의 시나리오와 문제 키를 기반으로 문제 정보를 가져온다.
+    grade = grade_problem(problem, session.virtual_state.state_json).grade  # 현재 세션의 가상 상태를 기반으로 문제를 채점하여 등급을 결정한다.
+    attempts, hint_level = await _task_stats(db, session)                   # 현재 세션의 시도 횟수와 힌트 레벨을 가져온다.
     following = (next_problem(session.scenario_key, session.task_key, grade=grade,
-        session_seed=session.id) if grade == "success" else None)
-    return CommandResponse(session_id=session.id, scenario_id=session.scenario_key,
+        session_seed=session.id) if grade == "success" else None)           # 만약 현재 등급이 성공이라면, 다음 문제를 가져오고, 그렇지 않다면 None을 반환한다.
+    return CommandResponse(session_id=session.id, scenario_id=session.scenario_key,     # 현재 세션의 ID와 시나리오 ID를 반환한다.
         task_id=session.task_key, version=session.virtual_state.version,
         attempt_id=attempt.id, result_code=execution.result_code,
         output=execution.output, state_before=execution.state_before,

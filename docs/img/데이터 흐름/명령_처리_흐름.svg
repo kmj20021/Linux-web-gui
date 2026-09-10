@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 780" width="1520" height="780" font-family="'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo',sans-serif">
+  <style>
+    .ink { fill:#16181d; }
+    .mut { fill:#63676f; }
+    .acc { fill:#9c3d2e; }
+    .b   { font-weight:700; }
+    .mono{ font-family:'Consolas','D2Coding','Courier New',monospace; }
+    .eyebrow { fill:#63676f; font-size:10px; letter-spacing:1.2px; }
+  </style>
+
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#16181d"/></marker>
+    <marker id="tipA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9c3d2e"/></marker>
+  </defs>
+
+  <rect width="1520" height="780" fill="#ffffff"/>
+
+  <!-- ────────── 학습자 ────────── -->
+  <rect x="650" y="18" width="220" height="40" fill="none" stroke="#16181d" stroke-width="1.2"/>
+  <text x="760" y="43" text-anchor="middle" class="ink b" font-size="13">학습자 (학습 화면)</text>
+
+  <line x1="760" y1="58" x2="760" y2="76" stroke="#16181d" stroke-width="1.2"/>
+  <path d="M760,76 H380 V104" fill="none" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <path d="M760,76 H1140 V104" fill="none" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <text x="368" y="92" text-anchor="end" class="mut" font-size="10.5">명령 입력</text>
+  <text x="1152" y="92" class="mut" font-size="10.5">질문 · 힌트 요청 · 화면 자동 요청</text>
+
+  <!-- ────────── 임계 경로 경계 ────────── -->
+  <line x1="760" y1="112" x2="760" y2="660" stroke="#b9bdc4" stroke-width="1.2" stroke-dasharray="4 5"/>
+
+  <!-- ══════════ 왼쪽 : 결정적 처리 ══════════ -->
+  <line x1="60" y1="110" x2="700" y2="110" stroke="#16181d" stroke-width="1.8"/>
+  <text x="60" y="130" class="eyebrow">임계 경로 · 결정적 처리</text>
+  <text x="60" y="154" class="ink b mono" font-size="13">POST /api/ai/sessions/{id}/commands</text>
+  <text x="60" y="172" class="mut" font-size="10.5">언어모델을 호출하지 않는다</text>
+  <line x1="60" y1="182" x2="700" y2="182" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="206" class="mut b" font-size="11">1</text>
+  <text x="94" y="206" class="ink b" font-size="11.5">세션 소유권 · 상태 버전 확인</text>
+  <text x="94" y="224" class="mut" font-size="10">클라이언트가 보낸 버전이 현재 버전과 다르면 409로 거부</text>
+  <line x1="60" y1="240" x2="700" y2="240" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="264" class="mut b" font-size="11">2</text>
+  <text x="94" y="264" class="ink b" font-size="11.5">명령 파싱 · 가상 상태 전이</text>
+  <text x="94" y="282" class="mut" font-size="10">상태 복사본 위에서 수행 · 미지원 문법이면 전이 전 상태를 반환</text>
+  <line x1="60" y1="298" x2="700" y2="298" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="322" class="mut b" font-size="11">3</text>
+  <text x="94" y="322" class="ink b" font-size="11.5">명령 시도 기록</text>
+  <text x="94" y="340" class="mut" font-size="10">명령 문자열 · 결과 코드 · 출력 · 실행 전 상태 · 실행 후 상태</text>
+  <line x1="60" y1="356" x2="700" y2="356" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="380" class="mut b" font-size="11">4</text>
+  <text x="94" y="380" class="ink b" font-size="11.5">가상 상태 갱신</text>
+  <text x="94" y="398" class="mut" font-size="10">결과 코드가 성공인 경우에만 상태를 저장하고 버전을 1 올린다</text>
+  <line x1="60" y1="414" x2="700" y2="414" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="438" class="mut b" font-size="11">5</text>
+  <text x="94" y="438" class="ink b" font-size="11.5">최종 상태 기준 채점</text>
+  <text x="94" y="456" class="mut" font-size="10">규칙 기반 채점기가 성공 · 부분 성공 · 실패를 판정</text>
+  <line x1="60" y1="472" x2="700" y2="472" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="496" class="mut b" font-size="11">6</text>
+  <text x="94" y="496" class="ink b" font-size="11.5">진도 미리보기 계산</text>
+  <text x="94" y="514" class="mut" font-size="10">시도 횟수 · 힌트 단계 집계, 성공이면 다음 문제 후보 산출 — 실제 저장은 /grade</text>
+  <line x1="60" y1="530" x2="700" y2="530" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="554" class="acc b" font-size="11">7</text>
+  <text x="94" y="554" class="acc b" font-size="11.5">응답 반환 — 판정 주체는 규칙 엔진이다</text>
+  <text x="94" y="572" class="mut" font-size="10">결과 코드 · 출력 · 전후 상태 · 진도(채점 결과)</text>
+  <line x1="60" y1="588" x2="700" y2="588" stroke="#16181d" stroke-width="1.4"/>
+
+  <text x="60" y="612" class="ink b" font-size="10.5">1 – 7 전 구간에서 언어모델 호출은 한 번도 일어나지 않는다.</text>
+  <text x="60" y="630" class="mut" font-size="10">명령의 출력 문자열까지 결정적 시뮬레이터가 만든다.</text>
+  <text x="60" y="648" class="mut" font-size="10">따라서 언어모델 호출이 실패해도 상태 전이와 채점은 그대로 성립한다.</text>
+
+  <!-- ────────── 확정 판정의 전달 ────────── -->
+  <line x1="706" y1="438" x2="814" y2="438" stroke="#9c3d2e" stroke-width="2.2" marker-end="url(#tipA)"/>
+  <rect x="698" y="400" width="120" height="34" fill="#ffffff"/>
+  <text x="757" y="414" text-anchor="middle" class="acc b" font-size="10.5">확정된 판정을</text>
+  <text x="757" y="428" text-anchor="middle" class="acc b" font-size="10.5">입력으로 전달</text>
+
+  <!-- ══════════ 오른쪽 : 표시 전용 보조 ══════════ -->
+  <line x1="820" y1="110" x2="1460" y2="110" stroke="#16181d" stroke-width="1.8"/>
+  <text x="820" y="130" class="eyebrow">임계 경로 밖 · 표시 전용</text>
+  <text x="820" y="154" class="ink b" font-size="13">이후의 별도 요청</text>
+  <text x="820" y="172" class="mut" font-size="10.5">가상 상태와 판정을 변경하지 않는다</text>
+  <line x1="820" y1="182" x2="1460" y2="182" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="204" class="ink b mono" font-size="10.5">POST .../commands/{attempt_id}/narrate</text>
+  <text x="820" y="221" class="mut" font-size="10">결과 코드가 성공이 아닐 때 화면이 자동으로 요청하는 참고용 설명</text>
+  <line x1="820" y1="234" x2="1460" y2="234" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="256" class="ink b mono" font-size="10.5">POST .../chat</text>
+  <text x="820" y="273" class="mut" font-size="10">학습자가 입력한 자연어 질문</text>
+  <line x1="820" y1="286" x2="1460" y2="286" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="308" class="ink b mono" font-size="10.5">POST .../hints</text>
+  <text x="820" y="325" class="mut" font-size="10">고정 문구로 정의된 단계별 힌트의 부연 설명</text>
+  <line x1="820" y1="338" x2="1460" y2="338" stroke="#16181d" stroke-width="1.2"/>
+
+  <text x="820" y="362" class="ink b" font-size="11">프롬프트 구성</text>
+  <text x="820" y="380" class="mut" font-size="9.5">지시문은 서버가 고정한다 — 인용된 학습자 데이터를 지시로 해석 금지 · 판정 변경 금지 · 출력 항목 한정</text>
+  <line x1="822" y1="392" x2="822" y2="452" stroke="#9c3d2e" stroke-width="1.4"/>
+  <text x="838" y="408" class="mut mono" font-size="9.5">&lt;UNTRUSTED_DATA&gt;</text>
+  <text x="838" y="426" class="ink" font-size="10">학습자 수준 · 문제 정의 · 가상 상태 · <tspan class="acc b">확정 판정</tspan> · 직전 명령 · 질문</text>
+  <text x="838" y="444" class="ink" font-size="10">최근 대화 4건 · 채점 이력 5건</text>
+  <line x1="820" y1="464" x2="1460" y2="464" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="488" class="ink b" font-size="12">Amazon Bedrock (LLM)</text>
+  <line x1="820" y1="502" x2="1460" y2="502" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="526" class="ink b" font-size="11">표시 전용 응답 — 정해진 항목만 허용</text>
+  <text x="820" y="546" class="ink mono" font-size="10">terminal_output · explanation · hint_level(0-3) · suggested_concept</text>
+  <text x="820" y="566" class="acc b" font-size="10">판정 항목은 응답에 존재하지 않는다.</text>
+  <line x1="820" y1="588" x2="1460" y2="588" stroke="#16181d" stroke-width="1.4"/>
+
+  <text x="820" y="612" class="ink b" font-size="10.5">언어모델은 확정된 판정을 입력으로 받을 뿐 되돌려 보내지 않는다.</text>
+  <text x="820" y="630" class="mut" font-size="10">호출이 실패하거나 한도를 넘으면 설명 없이 넘어간다.</text>
+  <text x="820" y="648" class="mut" font-size="10">채점기는 이 응답을 읽지 않는다.</text>
+
+  <!-- ══════════ 기록되는 테이블 ══════════ -->
+  <line x1="380" y1="664" x2="380" y2="688" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <line x1="1140" y1="664" x2="1140" y2="688" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+
+  <line x1="60" y1="690" x2="1460" y2="690" stroke="#16181d" stroke-width="1.8"/>
+  <text x="60" y="718" class="ink b" font-size="11">기록되는 테이블</text>
+
+  <line x1="512" y1="700" x2="512" y2="740" stroke="#d5d8dd" stroke-width="1"/>
+  <line x1="812" y1="700" x2="812" y2="740" stroke="#d5d8dd" stroke-width="1"/>
+  <line x1="1112" y1="700" x2="1112" y2="740" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="230" y="714" class="ink b mono" font-size="10">ai_command_attempts</text>
+  <text x="230" y="731" class="mut" font-size="9.5">명령 시도 · 실행 전후 상태</text>
+
+  <text x="530" y="714" class="ink b mono" font-size="10">ai_virtual_states</text>
+  <text x="530" y="731" class="mut" font-size="9.5">성공한 경우의 상태 · 버전</text>
+
+  <text x="830" y="714" class="ink b mono" font-size="10">ai_chat_messages</text>
+  <text x="830" y="731" class="mut" font-size="9.5">질의응답 대화 이력</text>
+
+  <text x="1130" y="714" class="ink b mono" font-size="10">ai_interaction_audits</text>
+  <text x="1130" y="731" class="mut" font-size="9.5">설명 · 힌트 상호작용 감사</text>
+
+  <line x1="60" y1="748" x2="1460" y2="748" stroke="#d5d8dd" stroke-width="1"/>
+</svg>

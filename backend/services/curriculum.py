@@ -10,9 +10,10 @@ from typing import Any, Iterable
 
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "test" / "fixtures" / "ai_learning_scenarios.json"
 
-# The final curriculum slot is a review round: one of the already-completed
-# problems, re-served under this prefix so its history/progress tracking
-# never collides with the original attempt at the same problem_id.
+# The curriculum is every fixture problem in order, plus one extra final slot:
+# a review round drawn from the already-completed problems and re-served under
+# this prefix so its history/progress tracking never collides with the original
+# attempt at the same problem_id.
 REVIEW_PREFIX = "review_"
 
 
@@ -75,10 +76,15 @@ def _problem_info_entry(scenario_key: str, task_key: str, *, title: str, descrip
 REVIEW_ROUND_LEARNING_GOAL = "지금까지 배운 내용을 종합적으로 복습한다."
 
 
+def _total_tasks() -> int:
+    """Curriculum length: every fixture problem plus the final review slot."""
+    return len(list_problems()) + 1
+
+
 def problem_info(scenario_key: str, task_key: str) -> dict[str, Any] | None:
     """Return the public, read-only metadata for one fixture problem or review round."""
     problems = list_problems()
-    total_tasks = len(problems)
+    total_tasks = _total_tasks()
     if task_key.startswith(REVIEW_PREFIX):
         real_task_key = _strip_review_prefix(task_key)
         source = next(
@@ -107,23 +113,22 @@ def problem_info(scenario_key: str, task_key: str) -> dict[str, Any] | None:
 
 
 def curriculum_info() -> list[dict[str, Any]]:
-    """Return public metadata for all problems in fixture order.
+    """Return public metadata for every fixture problem, then the review slot.
 
     The final slot previews the review round generically: the actual
     problem is only chosen once a session reaches it (see next_problem()).
     """
-    problems = list_problems()
-    total_tasks = len(problems)
+    total = _total_tasks()
     items = [
         problem_info(problem["scenario_id"], problem["problem_id"])
-        for problem in problems[:-1]
+        for problem in list_problems()
     ]
     items.append(_problem_info_entry(
         "review", "review",
         title="복습 라운드",
         description="지금까지 푼 문제 중 하나를 무작위로 다시 풀어 복습합니다.",
         learning_goal=REVIEW_ROUND_LEARNING_GOAL,
-        difficulty="advanced", task_index=total_tasks, total_tasks=total_tasks,
+        difficulty="advanced", task_index=total, total_tasks=total,
     ))
     return items
 
@@ -164,11 +169,12 @@ def next_problem(
 ) -> dict[str, Any] | None:
     """Advance only after success; otherwise keep the current problem.
 
-    The final slot is a review round: a random pick among the problems
-    already completed in this session, reusing their grading/initial_state
-    under a ``review_``-prefixed id. ``session_seed`` (the session id) keeps
-    repeated calls before the session actually advances consistent, while
-    still varying the pick across different sessions.
+    Every fixture problem is served in order. Only after the last one does the
+    extra final slot begin: a review round drawn at random from the problems
+    completed in this session, reusing their grading/initial_state under a
+    ``review_``-prefixed id. ``session_seed`` (the session id) keeps repeated
+    calls before the session actually advances consistent, while still varying
+    the pick across different sessions.
     """
     problems = list_problems()
 
@@ -199,10 +205,9 @@ def next_problem(
         return deepcopy(problems[current_index])
     next_index = current_index + 1
     if next_index >= len(problems):
-        return None
-    if next_index == len(problems) - 1:
-        candidates = problems[:next_index]
-        chosen = random.Random(session_seed).choice(candidates)
+        # The last fixture problem is done: the extra final slot is the review
+        # round, drawn from every problem completed up to this point.
+        chosen = random.Random(session_seed).choice(problems)
         return _review_problem(chosen)
     return deepcopy(problems[next_index])
 

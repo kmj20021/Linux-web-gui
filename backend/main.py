@@ -1,12 +1,12 @@
 """
 FastAPI 메인 진입점
-라즈베리 파이 기반 Linux 웹 GUI 관리 시스템
+Linux 웹 GUI 관리 시스템
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import asyncio
-import subprocess
+import subprocess # Docker 이미지 확인용
 
 from core.security import validate_secret_key
 
@@ -71,7 +71,7 @@ except ImportError as e:
 
 app = FastAPI(
     title="Linux Web GUI API",
-    description="라즈베리 파이 기반 통합 관리 시스템 REST API",
+    description="통합 관리 시스템 REST API",
     version="1.0.0"
 )
 

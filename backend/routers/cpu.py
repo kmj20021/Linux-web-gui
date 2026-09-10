@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/monitor",
-    tags=["CPU"],
-    dependencies=[Depends(get_current_user)],
+    tags=["CPU"], # 테스트
+    dependencies=[Depends(get_current_user)], # 로그인된 사용자인지 확인
 )
 
 # ============================================================

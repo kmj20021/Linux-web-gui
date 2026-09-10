@@ -20,7 +20,7 @@ async function request(path, options = {}) {
       ...options,
       signal: controller.signal,
       headers: {
-        ...getAuthHeaders(),
+        ...getAuthHeaders(), //토큰 달기
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
         ...options.headers,
       },

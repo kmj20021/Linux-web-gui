@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 780" width="1520" height="780" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <style>
+    .ink { fill:#16181d; }
+    .mut { fill:#63676f; }
+    .acc { fill:#9c3d2e; }
+    .b   { font-weight:700; }
+    .mono{ font-family:'Consolas','Courier New',monospace; }
+    .eyebrow { fill:#63676f; font-size:9.5px; letter-spacing:2px; }
+  </style>
+
+  <defs>
+    <marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#16181d"/></marker>
+    <marker id="tipA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9c3d2e"/></marker>
+  </defs>
+
+  <rect width="1520" height="780" fill="#ffffff"/>
+
+  <!-- ────────── Learner ────────── -->
+  <rect x="650" y="18" width="220" height="40" fill="none" stroke="#16181d" stroke-width="1.2"/>
+  <text x="760" y="43" text-anchor="middle" class="ink b" font-size="13">Learner (learning UI)</text>
+
+  <line x1="760" y1="58" x2="760" y2="76" stroke="#16181d" stroke-width="1.2"/>
+  <path d="M760,76 H380 V104" fill="none" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <path d="M760,76 H1140 V104" fill="none" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <text x="368" y="92" text-anchor="end" class="mut" font-size="10.5">Command input</text>
+  <text x="1152" y="92" class="mut" font-size="10.5">Question · hint · automatic UI request</text>
+
+  <!-- ────────── Critical-path boundary ────────── -->
+  <line x1="760" y1="112" x2="760" y2="660" stroke="#b9bdc4" stroke-width="1.2" stroke-dasharray="4 5"/>
+
+  <!-- ══════════ Left : deterministic ══════════ -->
+  <line x1="60" y1="110" x2="700" y2="110" stroke="#16181d" stroke-width="1.8"/>
+  <text x="60" y="130" class="eyebrow">CRITICAL PATH · DETERMINISTIC</text>
+  <text x="60" y="154" class="ink b mono" font-size="13">POST /api/ai/sessions/{id}/commands</text>
+  <text x="60" y="172" class="mut" font-size="10.5">No language-model call in this request</text>
+  <line x1="60" y1="182" x2="700" y2="182" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="206" class="mut b" font-size="11">1</text>
+  <text x="94" y="206" class="ink b" font-size="11.5">Session ownership and state version check</text>
+  <text x="94" y="224" class="mut" font-size="10">Rejected with 409 when the submitted version differs from the current one</text>
+  <line x1="60" y1="240" x2="700" y2="240" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="264" class="mut b" font-size="11">2</text>
+  <text x="94" y="264" class="ink b" font-size="11.5">Command parsing and virtual state transition</text>
+  <text x="94" y="282" class="mut" font-size="10">Applied on a copy; unsupported syntax returns the pre-transition state</text>
+  <line x1="60" y1="298" x2="700" y2="298" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="322" class="mut b" font-size="11">3</text>
+  <text x="94" y="322" class="ink b" font-size="11.5">Command attempt recorded</text>
+  <text x="94" y="340" class="mut" font-size="10">Command text · result code · output · state before · state after</text>
+  <line x1="60" y1="356" x2="700" y2="356" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="380" class="mut b" font-size="11">4</text>
+  <text x="94" y="380" class="ink b" font-size="11.5">Virtual state update</text>
+  <text x="94" y="398" class="mut" font-size="10">Stored with version + 1 only when the result code is success</text>
+  <line x1="60" y1="414" x2="700" y2="414" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="438" class="mut b" font-size="11">5</text>
+  <text x="94" y="438" class="ink b" font-size="11.5">Grading against the final state</text>
+  <text x="94" y="456" class="mut" font-size="10">The rule-based grader decides success · partial · failure</text>
+  <line x1="60" y1="472" x2="700" y2="472" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="496" class="mut b" font-size="11">6</text>
+  <text x="94" y="496" class="ink b" font-size="11.5">Progress preview computed</text>
+  <text x="94" y="514" class="mut" font-size="10">Attempts and hint level counted; the next task candidate is resolved on success — persisted by /grade</text>
+  <line x1="60" y1="530" x2="700" y2="530" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="60" y="554" class="acc b" font-size="11">7</text>
+  <text x="94" y="554" class="acc b" font-size="11.5">Response returned — the rule engine decides the verdict</text>
+  <text x="94" y="572" class="mut" font-size="10">Result code · output · state before and after · progress (grade)</text>
+  <line x1="60" y1="588" x2="700" y2="588" stroke="#16181d" stroke-width="1.4"/>
+
+  <text x="60" y="612" class="ink b" font-size="10.5">No language-model call occurs anywhere in steps 1 – 7.</text>
+  <text x="60" y="630" class="mut" font-size="10">Even the command output string is produced by the deterministic simulator.</text>
+  <text x="60" y="648" class="mut" font-size="10">State transition and grading therefore hold even when a model call fails.</text>
+
+  <!-- ────────── Handoff of the confirmed verdict ────────── -->
+  <line x1="706" y1="438" x2="814" y2="438" stroke="#9c3d2e" stroke-width="2.2" marker-end="url(#tipA)"/>
+  <rect x="694" y="400" width="128" height="34" fill="#ffffff"/>
+  <text x="757" y="414" text-anchor="middle" class="acc b" font-size="10.5">Confirmed verdict</text>
+  <text x="757" y="428" text-anchor="middle" class="acc b" font-size="10.5">passed in as input</text>
+
+  <!-- ══════════ Right : display-only ══════════ -->
+  <line x1="820" y1="110" x2="1460" y2="110" stroke="#16181d" stroke-width="1.8"/>
+  <text x="820" y="130" class="eyebrow">OFF THE CRITICAL PATH · DISPLAY ONLY</text>
+  <text x="820" y="154" class="ink b" font-size="13">Separate follow-up requests</text>
+  <text x="820" y="172" class="mut" font-size="10.5">They change neither the virtual state nor the verdict</text>
+  <line x1="820" y1="182" x2="1460" y2="182" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="204" class="ink b mono" font-size="10.5">POST .../commands/{attempt_id}/narrate</text>
+  <text x="820" y="221" class="mut" font-size="10">Requested automatically by the UI when the result code is not success</text>
+  <line x1="820" y1="234" x2="1460" y2="234" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="256" class="ink b mono" font-size="10.5">POST .../chat</text>
+  <text x="820" y="273" class="mut" font-size="10">A learner's natural-language question</text>
+  <line x1="820" y1="286" x2="1460" y2="286" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="308" class="ink b mono" font-size="10.5">POST .../hints</text>
+  <text x="820" y="325" class="mut" font-size="10">Elaboration on the fixed step-hint text</text>
+  <line x1="820" y1="338" x2="1460" y2="338" stroke="#16181d" stroke-width="1.2"/>
+
+  <text x="820" y="362" class="ink b" font-size="11">Prompt composition</text>
+  <text x="820" y="380" class="mut" font-size="9.5">Fixed by the server — quoted learner data is never an instruction; the verdict cannot be changed; output fields are enumerated</text>
+  <line x1="822" y1="392" x2="822" y2="452" stroke="#9c3d2e" stroke-width="1.4"/>
+  <text x="838" y="408" class="mut mono" font-size="9.5">&lt;UNTRUSTED_DATA&gt;</text>
+  <text x="838" y="426" class="ink" font-size="10">Learner level · task definition · virtual state · <tspan class="acc b">confirmed verdict</tspan> · last command · question</text>
+  <text x="838" y="444" class="ink" font-size="10">Last 4 conversation turns · last 5 grading records</text>
+  <line x1="820" y1="464" x2="1460" y2="464" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="488" class="ink b" font-size="12">Amazon Bedrock (LLM)</text>
+  <line x1="820" y1="502" x2="1460" y2="502" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="820" y="526" class="ink b" font-size="11">Display-only response — only the enumerated fields</text>
+  <text x="820" y="546" class="ink mono" font-size="10">terminal_output · explanation · hint_level(0-3) · suggested_concept</text>
+  <text x="820" y="566" class="acc b" font-size="10">No verdict field exists in the response.</text>
+  <line x1="820" y1="588" x2="1460" y2="588" stroke="#16181d" stroke-width="1.4"/>
+
+  <text x="820" y="612" class="ink b" font-size="10.5">The model receives the confirmed verdict as input and never returns one.</text>
+  <text x="820" y="630" class="mut" font-size="10">A failed or rate-limited call is skipped silently.</text>
+  <text x="820" y="648" class="mut" font-size="10">The grader never reads this response.</text>
+
+  <!-- ══════════ Tables written ══════════ -->
+  <line x1="380" y1="664" x2="380" y2="688" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+  <line x1="1140" y1="664" x2="1140" y2="688" stroke="#16181d" stroke-width="1.2" marker-end="url(#tip)"/>
+
+  <line x1="60" y1="690" x2="1460" y2="690" stroke="#16181d" stroke-width="1.8"/>
+  <text x="60" y="718" class="ink b" font-size="11">Tables written</text>
+
+  <line x1="512" y1="700" x2="512" y2="740" stroke="#d5d8dd" stroke-width="1"/>
+  <line x1="812" y1="700" x2="812" y2="740" stroke="#d5d8dd" stroke-width="1"/>
+  <line x1="1112" y1="700" x2="1112" y2="740" stroke="#d5d8dd" stroke-width="1"/>
+
+  <text x="230" y="714" class="ink b mono" font-size="10">ai_command_attempts</text>
+  <text x="230" y="731" class="mut" font-size="9.5">Attempt · state before and after</text>
+
+  <text x="530" y="714" class="ink b mono" font-size="10">ai_virtual_states</text>
+  <text x="530" y="731" class="mut" font-size="9.5">State and version on success</text>
+
+  <text x="830" y="714" class="ink b mono" font-size="10">ai_chat_messages</text>
+  <text x="830" y="731" class="mut" font-size="9.5">Q&amp;A conversation history</text>
+
+  <text x="1130" y="714" class="ink b mono" font-size="10">ai_interaction_audits</text>
+  <text x="1130" y="731" class="mut" font-size="9.5">Explanation · hint audit</text>
+
+  <line x1="60" y1="748" x2="1460" y2="748" stroke="#d5d8dd" stroke-width="1"/>
+</svg>

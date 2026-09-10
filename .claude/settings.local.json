@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp \"C:/Users/user/my_pj/linux-web-gui/docs/thlesis-tocs/sub04_form3_1_test.hwpx\" ./tbl_copy.hwp)",
+      "Bash(PYTHONPATH=./libs python -)"
+    ]
+  }
+}

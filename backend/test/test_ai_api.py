@@ -60,18 +60,20 @@ async def main() -> None:
 
             curriculum = await get_curriculum(owner)
             fixture_problems = list_problems()
-            assert curriculum.total_tasks == 6 and len(curriculum.items) == 6
-            # The final slot previews the review round generically; only the
-            # first five items map 1:1 onto fixture problems.
+            total_slots = len(fixture_problems) + 1
+            assert curriculum.total_tasks == total_slots
+            assert len(curriculum.items) == total_slots
+            # Every fixture problem maps 1:1 onto a slot; the extra final slot
+            # previews the review round generically.
             assert [item.task_id for item in curriculum.items[:-1]] == [
-                item["problem_id"] for item in fixture_problems[:-1]
+                item["problem_id"] for item in fixture_problems
             ]
             assert [item.scenario_id for item in curriculum.items[:-1]] == [
-                item["scenario_id"] for item in fixture_problems[:-1]
+                item["scenario_id"] for item in fixture_problems
             ]
             for index, item in enumerate(curriculum.items[:-1], start=1):
                 fixture_problem = fixture_problems[index - 1]
-                assert item.task_index == index and item.total_tasks == 6
+                assert item.task_index == index and item.total_tasks == total_slots
                 assert item.title == fixture_problem["title"]
                 assert item.description == fixture_problem["grading"]["success"]["description"]
                 assert item.learning_goal and item.difficulty in {
@@ -79,7 +81,8 @@ async def main() -> None:
                 }
             review_item = curriculum.items[-1]
             assert review_item.task_id == "review" and review_item.scenario_id == "review"
-            assert review_item.task_index == 6 and review_item.total_tasks == 6
+            assert review_item.task_index == total_slots
+            assert review_item.total_tasks == total_slots
             assert review_item.difficulty == "advanced" and review_item.learning_goal
 
             # Per-user concurrency is isolated; one user cannot block another.
@@ -166,13 +169,13 @@ async def main() -> None:
             assert degraded_attempt.data["narration_text"] is None
             ai_router.bedrock_service = fake_bedrock
 
-            # Complete the five real tasks through the public service functions
-            # without Bedrock/AWS. The sixth (final) slot is a review round of
-            # one of these five, not a fixed sixth fixture problem.
+            # Complete every fixture problem through the public service
+            # functions without Bedrock/AWS. The extra final slot is a review
+            # round drawn from the problems just completed.
             complete_session = await create_session(payload, db, owner)
             complete_version = 1
             static_problems = list_problems()
-            for index, problem in enumerate(static_problems[:-1]):
+            for index, problem in enumerate(static_problems):
                 assert (await get_session(complete_session.id, db, owner)).task_key == problem["problem_id"]
                 assert (await get_session(complete_session.id, db, owner)).current_problem.task_index == index + 1
                 for command_text in problem["answer_examples"]["correct"]["commands"]:
@@ -187,11 +190,11 @@ async def main() -> None:
 
             review_session = await get_session(complete_session.id, db, owner)
             assert review_session.task_key.startswith("review_")
-            assert review_session.current_problem.task_index == 6
-            assert review_session.current_problem.total_tasks == 6
+            assert review_session.current_problem.task_index == len(static_problems) + 1
+            assert review_session.current_problem.total_tasks == len(static_problems) + 1
             assert review_session.current_problem.difficulty == "advanced"
             real_task_key = review_session.task_key.removeprefix("review_")
-            assert real_task_key in {p["problem_id"] for p in static_problems[:-1]}
+            assert real_task_key in {p["problem_id"] for p in static_problems}
             review_problem = get_problem(review_session.scenario_key, review_session.task_key)
             for command_text in review_problem["answer_examples"]["correct"]["commands"]:
                 executed = await execute_learning_command(complete_session.id,

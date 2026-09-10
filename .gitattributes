@@ -1,0 +1,24 @@
+# 줄바꿈 정책: 저장소에는 항상 LF로 저장한다.
+# 환경마다 core.autocrlf 설정이 달라 CRLF가 섞여 들어오는 것을 막는다.
+* text=auto eol=lf
+
+*.py   text eol=lf
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.js   text eol=lf
+*.jsx  text eol=lf
+*.md   text eol=lf
+Dockerfile text eol=lf
+
+# 바이너리: 변환 금지
+*.png  binary
+*.jpg  binary
+*.pdf  binary
+*.hwp  binary
+*.hwpx binary
+*.xlsx binary
+*.docx binary
+*.pptx binary
+*.db   binary

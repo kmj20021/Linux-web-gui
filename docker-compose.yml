@@ -39,7 +39,7 @@ services:
       - ALGORITHM
       - ACCESS_TOKEN_EXPIRE_MINUTES=1440
       - DOCKER_HOST=tcp://docker-socket-proxy:2375
-    privileged: false
+    privileged: false #컨테이너에게 호스트 커널 권한을 주지 않음(기본 값이지만 일부러 적어둠)
     volumes:
       - /var/log:/var/log:ro
       - ./data/linux_web_gui.db:/app/linux_web_gui.db

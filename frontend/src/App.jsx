@@ -42,8 +42,7 @@ function Home() {
 
   return (
     <div className="home">
-      <h1>Linux Web GUI</h1>
-      <p>리눅스 학습 사이트</p>
+      <h1>리눅스 학습 사이트</h1>
       <div className="status">{status}</div>
       <Link to="/dashboard" className="dashboard-link">
         대시보드로 이동
