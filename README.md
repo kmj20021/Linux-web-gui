@@ -134,7 +134,16 @@ linux-web-gui/
 SECRET_KEY=<openssl rand -hex 32 등으로 생성한 임의 값>
 DATABASE_URL=sqlite+aiosqlite:////app/linux_web_gui.db
 DOMAIN_NAME=your-domain.com
+LLM_BASE_URL=https://<게이트웨이 주소>
+LLM_API_KEY=<발급받은 sk- 로 시작하는 키>
+LLM_MODEL=bedrock-haiku
 ```
+
+> `LLM_*` 는 AI 튜터가 쓰는 **OpenAI 호환 LLM 게이트웨이(LiteLLM)** 설정입니다.
+> `LLM_MODEL` 은 생략 가능하며 기본값은 `bedrock-haiku` 입니다. 허용 별칭은
+> `bedrock-haiku`·`bedrock-sonnet`·`bedrock-gpt-5.6-luna` 세 가지뿐이고, 원본 모델
+> ID(`claude-3-5-sonnet` 등)로는 호출되지 않습니다. `.env` 는 `.gitignore` 에 있으므로
+> 키가 저장소에 올라가지 않습니다. 키를 문서·스크린샷에 붙여 넣지 마세요.
 
 > 도메인이 없는 환경이면 `DOMAIN_NAME`에 **고정 공인 IP**를 넣고 개발 프로필로
 > 실행합니다. IP에는 TLS 인증서를 발급받을 수 없으므로 운영 프로필은 실행되지
@@ -397,7 +406,9 @@ Windows에서 메모리 카드의 buffers·cached가 0으로 보이는 것은 **
 | 터미널 안에서 `apt`·`ping`이 안 됨 | 의도된 동작입니다. 셸 컨테이너는 네트워크가 `none`입니다. |
 | 터미널 세션 생성 실패 | 동시 세션 한도(사용자당 1, 전체 5)에 걸렸을 수 있습니다. |
 | 메트릭이 503을 반환 | 수집 실패를 0으로 숨기지 않고 알리는 정상 동작입니다. 서버 로그의 `resource` 값을 확인하세요. |
-| `docker compose config` 실패 | 필수 환경변수(`SECRET_KEY`·`DATABASE_URL`·`DOMAIN_NAME`) 누락입니다. |
+| `docker compose config` 실패 | 필수 환경변수(`SECRET_KEY`·`DATABASE_URL`·`DOMAIN_NAME`·`LLM_BASE_URL`·`LLM_API_KEY`) 누락입니다. |
+| AI 튜터 응답이 항상 "규칙 기반 안내"로 내려감 | 게이트웨이 설정 문제입니다. 서버 로그의 `bedrock_tutor` 레코드에서 `reason` 을 보세요. `bedrock_not_configured`=환경변수 누락·형식 오류, `bedrock_access_denied`=키가 틀렸거나 다른 게이트웨이의 키(401/403), `bedrock_not_found`=모델 별칭 오타(404), `bedrock_budget_exceeded`=사용 한도 소진, `bedrock_timeout`=연결 실패. |
+| 키가 맞는데 `bedrock_access_denied` | 키에 줄바꿈·공백·전각 문자가 섞였을 수 있습니다. `printf '%s' "$LLM_API_KEY" \| wc -c` 로 길이를 확인하고 문서를 거치지 말고 그대로 복사해 다시 넣으세요. |
 
 ---
 

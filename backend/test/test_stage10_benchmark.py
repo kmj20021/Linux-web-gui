@@ -22,15 +22,17 @@ with tempfile.TemporaryDirectory() as directory:
     assert rows[0]["record_type"] == "run" and len(rows[1:]) == 30
     assert summary["schema_version"] == "1.0" and summary["mode"] == "mock"
     assert summary["api_call_count"] == 30 and summary["target_successes_reached"]
-    assert summary["region"] == "us-east-1" and summary["api"] == "Converse"
-    assert summary["inference_profile"] == "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert summary["provider"] == "litellm-gateway"
+    assert summary["api"] == "OpenAI-compatible chat.completions"
+    assert summary["inference_profile"] == "mock"
     assert summary["state_rule_benchmark"]["determinism_rate"] == 1.0
     assert summary["state_rule_benchmark"]["isolation_mix_count"] == 0
     assert summary["cost"]["estimated_cost"] is None
     rebuilt = benchmark.rebuild_summary(raw)
     assert rebuilt == summary
     blob = (raw.read_text() + summary_path.read_text()).lower()
-    for forbidden in ("aws_secret_access_key", "authorization: bearer", "password", "raw prompt"):
+    for forbidden in ("aws_secret_access_key", "authorization: bearer", "password", "raw prompt",
+                      "llm_api_key", "sk-"):
         assert forbidden not in blob
     assert benchmark.percentile([1, 2, 3, 4], .5) == 2
     assert benchmark.percentile([1, 2, 3, 4], .95) == 4

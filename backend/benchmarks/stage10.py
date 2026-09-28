@@ -14,17 +14,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from services.bedrock import MODEL_ID, REGION, create_client
+from services.bedrock import (CHAT_COMPLETIONS_PATH, PROVIDER, create_client,
+                              resolve_model)
 from services.curriculum import get_problem, initial_state
 from services.task_grader import grade_problem
 from services.virtual_linux import execute_command
 
 SCHEMA_VERSION = "1.0"
-API = "Converse"
+API = "OpenAI-compatible chat.completions"
 FIXTURE = Path(__file__).parent / "fixtures" / "stage10_inputs_v1.json"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[2] / "docs" / "benchmarks" / "stage10"
 TARGET_SUCCESSES = 30
 MAX_API_CALLS = 40
+DEFAULT_BENCHMARK_MODEL = "mock"
 FORBIDDEN_KEYS = {"prompt", "credentials", "jwt", "password", "secret", "access_key"}
 
 
@@ -84,15 +86,18 @@ def mock_text(case: dict) -> str:
     return json.dumps({"grade": case["expected_grade"], "explanation": "mock", "hint": "mock"})
 
 
-def call_live(client, prompt: str) -> tuple[str, dict]:
-    raw = client.converse(modelId=MODEL_ID,
-        messages=[{"role":"user","content":[{"text":prompt}]}],
-        inferenceConfig={"maxTokens":256,"temperature":0.1})
-    text = raw["output"]["message"]["content"][0]["text"]
-    meta = raw.get("ResponseMetadata", {}); usage = raw.get("usage", {})
-    return text, {"request_id": meta.get("RequestId"),
-                  "input_tokens": usage.get("inputTokens"),
-                  "output_tokens": usage.get("outputTokens")}
+def call_live(client, prompt: str, model: str) -> tuple[str, dict]:
+    response = client.post(CHAT_COMPLETIONS_PATH, json={
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 256, "temperature": 0.1})
+    response.raise_for_status()
+    raw = response.json()
+    text = raw["choices"][0]["message"]["content"]
+    usage = raw.get("usage") or {}
+    return text, {"request_id": raw.get("id"),
+                  "input_tokens": usage.get("prompt_tokens"),
+                  "output_tokens": usage.get("completion_tokens")}
 
 
 def state_benchmark(fixture: dict, repeats: int = 50) -> dict:
@@ -206,14 +211,15 @@ def mark_verified_request_id_hash_loss(raw_path: Path) -> Path:
 
 def run(output: Path = DEFAULT_OUTPUT, *, live: bool | None = None, target: int = TARGET_SUCCESSES) -> tuple[Path, Path]:
     fixture_bytes = FIXTURE.read_bytes(); fixture = json.loads(fixture_bytes)
-    live = os.getenv("RUN_BEDROCK_BENCHMARK") == "1" if live is None else live
+    live = os.getenv("RUN_LLM_BENCHMARK") == "1" if live is None else live
     run_id = f"stage10-{uuid.uuid4().hex[:12]}"; started_at = utcnow()
     output.mkdir(parents=True, exist_ok=True)
     prompt_hash = digest({v: [prompt_for(c, v) for c in fixture["cases"]]
                           for v in ("structured_state", "pure_llm")})
+    model = resolve_model() if live else DEFAULT_BENCHMARK_MODEL
     common = {"schema_version": SCHEMA_VERSION, "run_id": run_id,
         "started_at": started_at, "finished_at": None, "mode": "live" if live else "mock",
-        "region": REGION, "inference_profile": MODEL_ID, "api": API,
+        "provider": PROVIDER, "inference_profile": model, "api": API,
         "prompt_hash": prompt_hash, "schema_hash": digest({"sample":"stage10-v1"}),
         "fixture_hash": digest(fixture_bytes),
         "environment_conditions": {"python": platform.python_version(), "sequential": True,
@@ -228,7 +234,7 @@ def run(output: Path = DEFAULT_OUTPUT, *, live: bool | None = None, target: int 
         prompt = prompt_for(case, variant); begin = time.perf_counter()
         status, error_class, fallback, meta = "success", None, False, {}
         try:
-            text, meta = call_live(client, prompt) if live else (mock_text(case), {})
+            text, meta = call_live(client, prompt, model) if live else (mock_text(case), {})
             transport_success = live
             parse_ok, agrees, contradiction = parse_output(text, case["expected_grade"])
             if not parse_ok: status, error_class, fallback = "error", "schema_validation", True

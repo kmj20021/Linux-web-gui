@@ -90,6 +90,7 @@ def _is_credential_name(value: str) -> bool:
         "apikey",
         "defaultpassword",
         "jwtsecret",
+        "llmapikey",
         "password",
         "passwordhash",
         "plainpassword",

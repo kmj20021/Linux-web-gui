@@ -1,32 +1,36 @@
-"""Validated, bounded Amazon Bedrock tutoring service.
+"""Validated, bounded LLM tutoring service.
 
-The model may explain an authoritative state/grade, but it never owns or mutates
-either value and its output is never an execution instruction.
+Calls an OpenAI-compatible LLM gateway (LiteLLM). The model may explain an
+authoritative state/grade, but it never owns or mutates either value and its
+output is never an execution instruction.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Callable, Literal, Mapping, Sequence
 
-import boto3
-from botocore.config import Config
-from botocore.exceptions import (
-    BotoCoreError,
-    ClientError,
-    ConnectTimeoutError,
-    EndpointConnectionError,
-    ReadTimeoutError,
-)
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-REGION = "us-east-1"
-MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+# OpenAI 호환 LLM 게이트웨이(LiteLLM). 주소·키·모델은 환경변수로만 받는다.
+# 키를 소스나 저장소에 두지 않기 위한 규칙이므로 기본값을 만들지 않는다.
+BASE_URL_ENV = "LLM_BASE_URL"
+API_KEY_ENV = "LLM_API_KEY"
+MODEL_ENV = "LLM_MODEL"
+PROVIDER = "litellm-gateway"
+CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
+DEFAULT_MODEL = "bedrock-haiku"
+# 게이트웨이가 허용한 별칭 3종. 원본 모델 ID로는 호출되지 않는다.
+ALLOWED_MODELS = ("bedrock-haiku", "bedrock-sonnet", "bedrock-gpt-5.6-luna")
+# 키에 눈에 보이지 않는 문자(줄바꿈·전각)가 섞이면 글자는 같아 보여도 401이 난다.
+_API_KEY_PATTERN = re.compile(r"^[A-Za-z0-9_\-]+$")
 MAX_TOKENS = 1024
 TEMPERATURE = 0.1
 CONNECT_TIMEOUT_SECONDS = 3
@@ -39,18 +43,16 @@ MAX_STATE_TEXT = 6_000
 MAX_PROMPT_TEXT = 16_000
 
 _CODE_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
-_RETRYABLE_CODES = {
-    "ThrottlingException",
-    "TooManyRequestsException",
-    "ServiceUnavailableException",
-    "InternalServerException",
-    "ModelTimeoutException",
+# 게이트웨이 HTTP 상태 -> (내부 사유, 재시도 가능). 사유 문자열은 기존 API 계약 그대로 둔다.
+_STATUS_REASONS = {
+    400: ("bedrock_validation_error", False),
+    401: ("bedrock_access_denied", False),   # 키가 틀렸거나 다른 게이트웨이의 키
+    403: ("bedrock_access_denied", False),   # key not allowed to access model
+    404: ("bedrock_not_found", False),       # model not found
+    422: ("bedrock_validation_error", False),
+    429: ("bedrock_transient_error", True),
 }
-_NON_RETRYABLE_CODES = {
-    "AccessDeniedException",
-    "ValidationException",
-    "ResourceNotFoundException",
-}
+_REQUEST_ID_HEADERS = ("x-litellm-call-id", "x-request-id")
 
 logger = logging.getLogger(__name__)
 
@@ -69,24 +71,24 @@ class TutorModelResponse(BaseModel):
 NARRATE_TOOL_NAME = "emit_terminal_narration"
 
 _NARRATION_TOOL_SPEC = {
-    "toolSpec": {
+    "type": "function",
+    "function": {
         "name": NARRATE_TOOL_NAME,
         "description": (
             "Emit the simulated terminal narration text to show the learner. "
             "Never claim a real command executed or real state changed."
         ),
-        "inputSchema": {
-            "json": {
-                "type": "object",
-                "properties": {
-                    "terminal_output": {"type": "string", "maxLength": 2000},
-                },
-                "required": ["terminal_output"],
-                "additionalProperties": False,
-            }
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "terminal_output": {"type": "string", "maxLength": 2000},
+            },
+            "required": ["terminal_output"],
+            "additionalProperties": False,
         },
-    }
+    },
 }
+_NARRATION_TOOL_CHOICE = {"type": "function", "function": {"name": NARRATE_TOOL_NAME}}
 
 _INJECTION_INSTRUCTION = (
     "The user_input matched shell metacharacters this simulator always rejects "
@@ -118,8 +120,8 @@ class NarrationResponse(BaseModel):
 class BedrockMetadata(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, protected_namespaces=())
 
-    region: Literal[REGION] = REGION
-    model_id: Literal[MODEL_ID] = MODEL_ID
+    provider: Literal[PROVIDER] = PROVIDER
+    model_id: str = Field(default=DEFAULT_MODEL, max_length=100)
     request_id: str | None = Field(default=None, max_length=256)
     input_tokens: int | None = Field(default=None, ge=0)
     output_tokens: int | None = Field(default=None, ge=0)
@@ -156,16 +158,61 @@ class _Failure:
     request_id: str | None = None
 
 
-def create_client() -> Any:
-    """Create the sole approved runtime client using boto3's credential chain."""
-    return boto3.client(
-        "bedrock-runtime",
-        region_name=REGION,
-        config=Config(
-            connect_timeout=CONNECT_TIMEOUT_SECONDS,
-            read_timeout=READ_TIMEOUT_SECONDS,
-            retries={"total_max_attempts": 1, "mode": "standard"},
-        ),
+class ConfigError(Exception):
+    """Gateway address/key/model is missing or malformed.
+
+    Deliberately not a ValueError: a misconfiguration must not be reported as
+    an invalid model response. The message never carries the key or the URL.
+    """
+
+
+class GatewayError(Exception):
+    """Non-2xx from the gateway, carrying only what is safe to keep."""
+
+    def __init__(self, status: int, message: str = "", request_id: str | None = None) -> None:
+        super().__init__(f"gateway status {status}")
+        self.status = status
+        self.request_id = request_id
+        # 사용 한도 초과만 별도 사유로 구분한다. 원문은 저장만 하고 로그·응답에 내보내지 않는다.
+        self.budget_exceeded = "budget" in message.lower()
+
+    def __str__(self) -> str:  # 실수로 로깅해도 상류 메시지가 새지 않는다.
+        return f"gateway status {self.status}"
+
+
+def resolve_model() -> str:
+    """Return the configured model alias, rejecting anything the gateway rejects."""
+    value = (os.getenv(MODEL_ENV) or DEFAULT_MODEL).strip()
+    if value not in ALLOWED_MODELS:
+        raise ConfigError(f"{MODEL_ENV} must be one of {', '.join(ALLOWED_MODELS)}")
+    return value
+
+
+def gateway_config() -> tuple[str, str]:
+    """Read and validate the gateway address and key from the environment."""
+    base_url = (os.getenv(BASE_URL_ENV) or "").strip()
+    api_key = (os.getenv(API_KEY_ENV) or "").strip()
+    if not base_url or not api_key:
+        raise ConfigError(f"{BASE_URL_ENV} and {API_KEY_ENV} must both be set")
+    if not base_url.startswith("https://"):
+        raise ConfigError(f"{BASE_URL_ENV} must be an https URL")
+    if not _API_KEY_PATTERN.fullmatch(api_key):
+        raise ConfigError(f"{API_KEY_ENV} contains characters that cannot be part of the key")
+    return base_url.rstrip("/"), api_key
+
+
+def create_client() -> httpx.Client:
+    """Create the sole approved runtime client for the OpenAI-compatible gateway."""
+    base_url, api_key = gateway_config()
+    return httpx.Client(
+        base_url=base_url,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        # 게이트웨이는 공인 인증서를 쓰므로 검증을 끄지 않는다(verify 기본값 유지).
+        timeout=httpx.Timeout(READ_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS),
+        follow_redirects=False,
     )
 
 
@@ -285,8 +332,8 @@ class BedrockService:
         sleep: Callable[[float], None] = time.sleep,
         log: logging.Logger = logger,
     ) -> None:
-        # Creating a boto3 client can itself consult the default credential
-        # chain. Defer it so those failures use the same degraded contract.
+        # Creating the client reads and validates the gateway env vars. Defer
+        # it so a missing or malformed key uses the same degraded contract.
         self._client = client
         self._sleep = sleep
         self._log = log
@@ -303,16 +350,7 @@ class BedrockService:
         prompt_id = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
-                if self._client is None:
-                    self._client = create_client()
-                raw = self._client.converse(
-                    modelId=MODEL_ID,
-                    messages=[{"role": "user", "content": [{"text": prompt}]}],
-                    inferenceConfig={
-                        "maxTokens": MAX_TOKENS,
-                        "temperature": TEMPERATURE,
-                    },
-                )
+                raw, model = self._invoke(prompt)
                 text = _response_text(raw)
                 response = parse_model_response(text)
                 result = BedrockTutorResult(
@@ -321,7 +359,7 @@ class BedrockService:
                     retryable=False,
                     message=response.explanation,
                     response=response,
-                    metadata=_metadata(raw, started, attempt),
+                    metadata=_metadata(raw, started, attempt, model),
                 )
                 self._log_event("success", result, prompt_id)
                 if prompt_inputs != inputs_copy:
@@ -365,20 +403,7 @@ class BedrockService:
         prompt_id = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
-                if self._client is None:
-                    self._client = create_client()
-                raw = self._client.converse(
-                    modelId=MODEL_ID,
-                    messages=[{"role": "user", "content": [{"text": prompt}]}],
-                    inferenceConfig={
-                        "maxTokens": MAX_TOKENS,
-                        "temperature": TEMPERATURE,
-                    },
-                    toolConfig={
-                        "tools": [_NARRATION_TOOL_SPEC],
-                        "toolChoice": {"tool": {"name": NARRATE_TOOL_NAME}},
-                    },
-                )
+                raw, model = self._invoke(prompt, narration=True)
                 tool_input = _response_tool_use(raw)
                 response = NarrationResponse.model_validate(tool_input)
                 result = BedrockNarrationResult(
@@ -387,7 +412,7 @@ class BedrockService:
                     retryable=False,
                     message=response.terminal_output,
                     response=response,
-                    metadata=_metadata(raw, started, attempt),
+                    metadata=_metadata(raw, started, attempt, model),
                 )
                 self._log_event("success", result, prompt_id, event="bedrock_narrate")
                 if prompt_inputs != inputs_copy:
@@ -422,6 +447,22 @@ class BedrockService:
 
         return self._fallback("bedrock_error", True, MAX_ATTEMPTS, started,
                                result_cls=BedrockNarrationResult, event="bedrock_narrate")
+
+    def _invoke(self, prompt: str, *, narration: bool = False) -> tuple[dict[str, Any], str]:
+        """POST one bounded chat completion to the gateway and decode it."""
+        model = resolve_model()
+        if self._client is None:
+            self._client = create_client()
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": MAX_TOKENS,
+            "temperature": TEMPERATURE,
+        }
+        if narration:
+            payload["tools"] = [_NARRATION_TOOL_SPEC]
+            payload["tool_choice"] = _NARRATION_TOOL_CHOICE
+        return _decode(self._client.post(CHAT_COMPLETIONS_PATH, json=payload)), model
 
     def _fallback(
         self,
@@ -466,8 +507,8 @@ class BedrockService:
             "outcome": outcome,
             "reason": result.reason,
             "retryable": result.retryable,
-            "region": REGION,
-            "model_id": MODEL_ID,
+            "provider": PROVIDER,
+            "model_id": result.metadata.model_id,
             "request_id": result.metadata.request_id,
             "latency_ms": result.metadata.latency_ms,
             "attempts": result.metadata.attempts,
@@ -498,32 +539,86 @@ def _bounded_json(value: Any, limit: int) -> Any:
     return copied
 
 
+def _decode(response: Any) -> dict[str, Any]:
+    """Turn one gateway HTTP response into a body dict or a safe exception."""
+    status = response.status_code
+    request_id = _request_id(response.headers)
+    if status >= 400:
+        raise GatewayError(status, _error_message(response), request_id)
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise ValueError("gateway response is not JSON") from exc
+    if not isinstance(body, dict):
+        raise ValueError("gateway response must be a JSON object")
+    return body
+
+
+def _error_message(response: Any) -> str:
+    """Read upstream error text for classification only; never logged or returned."""
+    try:
+        body = response.json()
+    except Exception:
+        return ""
+    if isinstance(body, Mapping):
+        error = body.get("error")
+        if isinstance(error, Mapping):
+            return str(error.get("message") or "")
+        return str(body.get("message") or "")
+    return ""
+
+
+def _request_id(headers: Any) -> str | None:
+    for name in _REQUEST_ID_HEADERS:
+        try:
+            value = headers.get(name)
+        except Exception:
+            return None
+        if isinstance(value, str) and value:
+            return value[:256]
+    return None
+
+
+def _one_message(raw: Mapping[str, Any]) -> Mapping[str, Any]:
+    choices = raw["choices"]
+    if isinstance(choices, str) or not isinstance(choices, Sequence) or len(choices) != 1:
+        raise ValueError("gateway returned more or fewer than one choice")
+    message = choices[0]["message"]
+    if not isinstance(message, Mapping):
+        raise ValueError("unexpected chat completion message")
+    return message
+
+
 def _response_text(raw: Mapping[str, Any]) -> str:
-    content = raw["output"]["message"]["content"]
-    texts = [part["text"] for part in content if isinstance(part, Mapping) and "text" in part]
-    if len(texts) != 1 or not isinstance(texts[0], str):
-        raise ValueError("unexpected Converse content")
-    return texts[0]
+    content = _one_message(raw).get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("unexpected chat completion content")
+    return content
 
 
 def _response_tool_use(raw: Mapping[str, Any]) -> dict[str, Any]:
-    content = raw["output"]["message"]["content"]
-    inputs = [part["toolUse"]["input"] for part in content
-              if isinstance(part, Mapping) and isinstance(part.get("toolUse"), Mapping)]
-    if len(inputs) != 1 or not isinstance(inputs[0], dict):
-        raise ValueError("unexpected Converse tool-use content")
-    return inputs[0]
+    calls = _one_message(raw).get("tool_calls")
+    if isinstance(calls, str) or not isinstance(calls, Sequence) or len(calls) != 1:
+        raise ValueError("unexpected tool-call content")
+    function = calls[0]["function"]
+    if function.get("name") != NARRATE_TOOL_NAME:
+        raise ValueError("model called an unexpected tool")
+    arguments = json.loads(function["arguments"])  # JSONDecodeError is a ValueError
+    if not isinstance(arguments, dict):
+        raise ValueError("tool arguments must be a JSON object")
+    return arguments
 
 
 def _metadata(
-    raw: Mapping[str, Any], started: float, attempts: int
+    raw: Mapping[str, Any], started: float, attempts: int, model: str
 ) -> BedrockMetadata:
-    response_meta = raw.get("ResponseMetadata", {})
-    usage = raw.get("usage", {})
+    usage = raw.get("usage") or {}
+    call_id = raw.get("id")
     return BedrockMetadata(
-        request_id=response_meta.get("RequestId"),
-        input_tokens=usage.get("inputTokens"),
-        output_tokens=usage.get("outputTokens"),
+        model_id=model,
+        request_id=call_id[:256] if isinstance(call_id, str) and call_id else None,
+        input_tokens=usage.get("prompt_tokens"),
+        output_tokens=usage.get("completion_tokens"),
         latency_ms=_elapsed_ms(started),
         attempts=attempts,
     )
@@ -534,24 +629,22 @@ def _elapsed_ms(started: float) -> int:
 
 
 def _classify_failure(exc: Exception) -> _Failure:
-    if isinstance(exc, (ConnectTimeoutError, ReadTimeoutError, EndpointConnectionError)):
-        return _Failure("bedrock_timeout", True)
-    if isinstance(exc, ClientError):
-        error = exc.response.get("Error", {})
-        code = str(error.get("Code") or "ClientError")
-        meta = exc.response.get("ResponseMetadata", {})
-        request_id = meta.get("RequestId")
-        status = meta.get("HTTPStatusCode")
-        if code in _NON_RETRYABLE_CODES:
-            reason = {
-                "AccessDeniedException": "bedrock_access_denied",
-                "ValidationException": "bedrock_validation_error",
-                "ResourceNotFoundException": "bedrock_not_found",
-            }[code]
-            return _Failure(reason, False, request_id)
-        if code in _RETRYABLE_CODES or (isinstance(status, int) and status >= 500):
-            return _Failure("bedrock_transient_error", True, request_id)
-        return _Failure("bedrock_error", False, request_id)
-    if isinstance(exc, BotoCoreError):
+    # 설정 오류는 재시도해도 결과가 같으므로 즉시 규칙 기반 안내로 내려간다.
+    if isinstance(exc, ConfigError):
+        return _Failure("bedrock_not_configured", False)
+    if isinstance(exc, GatewayError):
+        if exc.budget_exceeded:
+            return _Failure("bedrock_budget_exceeded", False, exc.request_id)
+        known = _STATUS_REASONS.get(exc.status)
+        if known is not None:
+            return _Failure(known[0], known[1], exc.request_id)
+        if exc.status >= 500:
+            return _Failure("bedrock_transient_error", True, exc.request_id)
+        return _Failure("bedrock_error", False, exc.request_id)
+    # 주소 자체가 잘못된 경우는 재시도 대상이 아니다.
+    if isinstance(exc, (httpx.InvalidURL, httpx.UnsupportedProtocol)):
         return _Failure("bedrock_sdk_error", False)
+    # 타임아웃·연결 실패는 사내망 문제나 점검일 수 있으므로 한 번 더 시도한다.
+    if isinstance(exc, httpx.TransportError):
+        return _Failure("bedrock_timeout", True)
     return _Failure("bedrock_error", False)

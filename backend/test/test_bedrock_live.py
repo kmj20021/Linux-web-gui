@@ -1,4 +1,4 @@
-"""Explicit opt-in smoke test for the approved Bedrock Converse profile."""
+"""Explicit opt-in smoke test for the approved LLM gateway profile."""
 from __future__ import annotations
 
 import os
@@ -11,8 +11,8 @@ if str(BACKEND_DIR) not in sys.path:
 
 
 def main() -> None:
-    if os.getenv("RUN_BEDROCK_LIVE") != "1":
-        print("SKIP: set RUN_BEDROCK_LIVE=1 to call the approved Bedrock profile")
+    if os.getenv("RUN_LLM_LIVE") != "1":
+        print("SKIP: set RUN_LLM_LIVE=1 to call the approved LLM gateway profile")
         return
 
     from services.bedrock import BedrockService
@@ -28,8 +28,9 @@ def main() -> None:
     assert not result.degraded, result.model_dump()
     assert result.response is not None
     print(
-        "PASS: approved Bedrock profile returned validated JSON; "
-        f"request_id={result.metadata.request_id} latency_ms={result.metadata.latency_ms}"
+        "PASS: approved gateway profile returned validated JSON; "
+        f"model={result.metadata.model_id} request_id={result.metadata.request_id} "
+        f"latency_ms={result.metadata.latency_ms}"
     )
 
 

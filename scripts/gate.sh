@@ -5,7 +5,8 @@
 # Phase 완료 게이트를 한 번에 실행하고 PASS/FAIL 을 요약한다.
 # 목적은 게이트를 "약하게" 만드는 게 아니라, 매번 재발견하던 것들을 고정하는 것이다.
 #
-#   - Compose 필수 환경변수(SECRET_KEY / DATABASE_URL / DOMAIN_NAME)를 안전한 합성값으로 채운다.
+#   - Compose 필수 환경변수(SECRET_KEY / DATABASE_URL / DOMAIN_NAME /
+#     LLM_BASE_URL / LLM_API_KEY)를 안전한 합성값으로 채운다.
 #     이미 셸에 값이 있으면 그 값을 존중한다. 값은 출력하지 않는다.
 #   - 운영·개발 두 Compose 프로필을 모두 검증한다.
 #   - 공백 검사는 줄바꿈 규칙과 무관하게 수행한다. 이 저장소에는 index 가 CRLF 인 파일이
@@ -35,6 +36,8 @@ FAST=0
 export SECRET_KEY="${SECRET_KEY:-synthetic-gate-value-not-a-real-secret-0000000}"
 export DATABASE_URL="${DATABASE_URL:-sqlite+aiosqlite:///./synthetic-gate.db}"
 export DOMAIN_NAME="${DOMAIN_NAME:-gate.invalid}"
+export LLM_BASE_URL="${LLM_BASE_URL:-https://gate.invalid}"
+export LLM_API_KEY="${LLM_API_KEY:-synthetic-gate-key-not-a-real-key}"
 
 PASSED=()
 FAILED=()
